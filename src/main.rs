@@ -288,6 +288,15 @@ fn repository_section<'a>(config: &'a Config, repository: &str) -> Option<&'a st
     })
 }
 
+fn repository_metadata_id(path: &Path) -> Result<Option<Vec<u8>>, Error> {
+    let output = Command::new("git")
+        .arg("--git-dir")
+        .arg(path)
+        .args(["rev-parse", "--verify", "--quiet", "HEAD:.aurcade.toml"])
+        .output()?;
+    Ok(output.status.success().then_some(output.stdout))
+}
+
 fn repository_description(path: &Path) -> Result<Option<String>, Error> {
     let output = Command::new("git")
         .arg("--git-dir")
@@ -408,6 +417,11 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     } else {
         destination.clone()
     };
+    let metadata_before = if action == "git-receive-pack" && !created {
+        repository_metadata_id(&path)?
+    } else {
+        None
+    };
 
     let status = match Command::new(action).arg(&path).status() {
         Ok(status) => status,
@@ -428,7 +442,9 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
         }
         fs::remove_dir_all(&staging)?;
     }
-    if action == "git-receive-pack" {
+    if action == "git-receive-pack"
+        && (created || metadata_before != repository_metadata_id(&destination)?)
+    {
         write_cgit_config(config, &root)?;
     }
     Ok(())
@@ -592,6 +608,56 @@ mod tests {
 
         configured_repositories(&config, &root, &root, &mut repositories).unwrap();
         assert!(repositories.is_empty());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn metadata_id_only_changes_with_metadata() {
+        let directory = test_directory("metadata-id");
+        let repository = directory.join("repository");
+        assert!(
+            Command::new("git")
+                .args(["init", "--quiet", "--initial-branch=main"])
+                .arg(&repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let git = |arguments: &[&str]| {
+            assert!(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(&repository)
+                    .args(arguments)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        };
+        git(&["config", "user.name", "AURcade"]);
+        git(&["config", "user.email", "aurcade@example.invalid"]);
+        let git_dir = repository.join(".git");
+        assert_eq!(repository_metadata_id(&git_dir).unwrap(), None);
+
+        fs::write(repository.join(".aurcade.toml"), "description = \"one\"\n").unwrap();
+        git(&["add", ".aurcade.toml"]);
+        git(&["commit", "--quiet", "-m", "add metadata"]);
+        let first = repository_metadata_id(&git_dir).unwrap();
+        assert!(first.is_some());
+
+        fs::write(repository.join("README"), "code-only change\n").unwrap();
+        git(&["add", "README"]);
+        git(&["commit", "--quiet", "-m", "ordinary change"]);
+        assert_eq!(repository_metadata_id(&git_dir).unwrap(), first);
+
+        fs::write(repository.join(".aurcade.toml"), "description = \"two\"\n").unwrap();
+        git(&["commit", "--quiet", "-am", "change metadata"]);
+        assert_ne!(repository_metadata_id(&git_dir).unwrap(), first);
+
+        fs::remove_file(repository.join(".aurcade.toml")).unwrap();
+        git(&["add", "-u"]);
+        git(&["commit", "--quiet", "-m", "remove metadata"]);
+        assert_eq!(repository_metadata_id(&git_dir).unwrap(), None);
         fs::remove_dir_all(directory).unwrap();
     }
 
