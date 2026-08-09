@@ -1,5 +1,5 @@
 title = "AUR repositories"
-clone_prefix = "http://localhost:8080"
+clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 
 # Restart the container after changing accounts, keys, or paths.
 [[accounts]]
@@ -7,7 +7,10 @@ name = "alice"
 # Paste complete public keys here, for example: "ssh-ed25519 AAAA... alice@host"
 ssh_keys = []
 # A trailing slash grants the namespace and allows first-push creation below it.
-paths = ["example", "team/tools"]
+paths = ["example", "team/tools", "alice/"]
+
+# git remote add origin ssh://git@localhost:2222/alice/newrepo.git
+# git push -u origin main
 
 # Repeating a path grants both accounts write access.
 # [[accounts]]
