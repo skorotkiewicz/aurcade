@@ -32,6 +32,16 @@ install-hook:
 remove-hook:
     @rm .git/hooks/pre-commit
 
+# `just push-all main`
+push-all BRANCH="main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t remotes < <(git remote)
+    ((${#remotes[@]})) || { echo "No remotes configured"; exit 1; }
+    for remote in "${remotes[@]}"; do
+        git push "$remote" "{{ BRANCH }}"
+    done
+
 add-tag ORIGIN="origin":
     #!/usr/bin/env bash
     set -euo pipefail
