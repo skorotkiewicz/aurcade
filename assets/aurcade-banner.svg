@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" role="img" aria-labelledby="title desc">
+  <title id="title">AURcade</title>
+  <desc id="desc">A nostalgic neon arcade cabinet banner reading Insert SSH key to continue and No quarters, just commits.</desc>
+
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#09051a"/>
+      <stop offset="1" stop-color="#180b2d"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#102943"/>
+      <stop offset="1" stop-color="#07111f"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#49e7ff" stroke-opacity=".08"/>
+    </pattern>
+    <pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse">
+      <path d="M0 3.5H1200" stroke="#000" stroke-opacity=".24"/>
+    </pattern>
+    <filter id="cyanGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pinkGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="380" rx="24" fill="url(#background)"/>
+  <rect width="1200" height="380" rx="24" fill="url(#grid)"/>
+
+  <!-- Tiny starfield, because every respectable arcade machine needs space. -->
+  <g fill="#fff9c4">
+    <path d="m77 55 3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>
+    <path d="m1093 80 2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+    <path d="m1028 302 3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>
+    <circle cx="145" cy="302" r="2"/><circle cx="1130" cy="212" r="2"/>
+    <circle cx="990" cy="45" r="2"/><circle cx="220" cy="79" r="2"/>
+  </g>
+
+  <!-- Arcade cabinet -->
+  <g transform="translate(64 49)">
+    <path d="M30 0h202l18 38-14 148 27 88H0l27-88L12 38z" fill="#24133d" stroke="#ff4fd8" stroke-width="6" filter="url(#pinkGlow)"/>
+    <path d="M30 0h202l14 31H16z" fill="#ff4fd8"/>
+    <text x="131" y="24" fill="#160823" font-family="monospace" font-size="19" font-weight="bold" text-anchor="middle">AURCADE</text>
+    <rect x="35" y="49" width="192" height="119" rx="9" fill="url(#screen)" stroke="#49e7ff" stroke-width="4"/>
+    <path d="M72 102h29l10-14 14 28 14-20 12 11h39" fill="none" stroke="#7dff9b" stroke-width="6" stroke-linejoin="round"/>
+    <text x="131" y="145" fill="#49e7ff" font-family="monospace" font-size="13" text-anchor="middle">git push origin main</text>
+    <path d="M24 184h215l16 49H9z" fill="#382052" stroke="#ff4fd8" stroke-width="4"/>
+    <circle cx="73" cy="207" r="15" fill="#ffe66d" stroke="#fff2a8" stroke-width="4"/>
+    <circle cx="182" cy="211" r="12" fill="#49e7ff"/>
+    <circle cx="214" cy="211" r="12" fill="#ff4fd8"/>
+    <path d="M73 191v-20" stroke="#ffe66d" stroke-width="8"/>
+    <path d="M42 233h178l13 41H29z" fill="#180b2d"/>
+  </g>
+
+  <!-- Main screen copy -->
+  <g font-family="monospace" text-anchor="middle">
+    <text x="745" y="132" fill="#49e7ff" font-size="82" font-weight="bold" letter-spacing="8" filter="url(#cyanGlow)">AURCADE</text>
+    <text x="745" y="180" fill="#ffe66d" font-size="23" letter-spacing="4">INSERT SSH KEY TO CONTINUE</text>
+    <rect x="481" y="211" width="528" height="2" fill="#ff4fd8" filter="url(#pinkGlow)"/>
+    <text x="745" y="255" fill="#d8c8ff" font-size="19" letter-spacing="3">NO QUARTERS · JUST COMMITS</text>
+    <text x="745" y="300" fill="#7dff9b" font-size="15">[ cgit ]  [ ssh ]  [ one more repo? y/n ]</text>
+  </g>
+
+  <rect width="1200" height="380" rx="24" fill="url(#scanlines)" pointer-events="none"/>
+  <rect x="3" y="3" width="1194" height="374" rx="21" fill="none" stroke="#49e7ff" stroke-opacity=".55" stroke-width="6"/>
+</svg>
