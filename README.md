@@ -20,7 +20,14 @@ A small Git repository host for static accounts.
 
 2. Add each account and its public SSH keys to `config.toml`.
 
-3. Start the service.
+3. Pull and start the published image, `ghcr.io/skorotkiewicz/aurcade`.
+
+   ```sh
+   docker compose -f docker/docker-compose.yml pull
+   docker compose -f docker/docker-compose.yml up -d
+   ```
+
+   To build locally instead:
 
    ```sh
    docker compose -f docker/docker-compose.yml up --build -d
@@ -29,6 +36,46 @@ A small Git repository host for static accounts.
 4. Open <http://localhost:8080>.
 
 The SSH service uses port `2222` on the host.
+
+## Docker run
+
+Create a directory:
+
+```sh
+mkdir aurcade
+cd aurcade
+```
+
+Create `config.toml` with:
+
+```toml
+title = "AURcade"
+description = "My Git repositories"
+clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
+style = "cgit-theme.css"
+logo = "aurcade-logo.svg"
+
+[[accounts]]
+name = "alice"
+ssh_keys = ["ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"]
+paths = ["alice/"]
+```
+
+Run the published image:
+
+```sh
+docker run -d \
+  --name aurcade \
+  --restart unless-stopped \
+  -p 8080:80 \
+  -p 2222:22 \
+  -v "$PWD/config.toml:/etc/aurcade/config.toml:ro" \
+  -v aurcade-repositories:/var/lib/aurcade \
+  -v aurcade-ssh-host-keys:/etc/ssh/host_keys \
+  ghcr.io/skorotkiewicz/aurcade
+```
+
+Docker creates the two named volumes automatically.
 
 ## Configure access
 
