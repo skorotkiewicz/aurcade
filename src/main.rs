@@ -32,12 +32,6 @@ struct Account {
     paths: Vec<String>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RepositoryConfig {
-    description: String,
-}
-
 fn main() {
     if let Err(error) = run() {
         eprintln!("aurcade: {error}");
@@ -292,7 +286,7 @@ fn repository_metadata_id(path: &Path) -> Result<Option<Vec<u8>>, Error> {
     let output = Command::new("git")
         .arg("--git-dir")
         .arg(path)
-        .args(["rev-parse", "--verify", "--quiet", "HEAD:.aurcade.toml"])
+        .args(["rev-parse", "--verify", "--quiet", "HEAD:.aurcade"])
         .output()?;
     Ok(output.status.success().then_some(output.stdout))
 }
@@ -301,19 +295,21 @@ fn repository_description(path: &Path) -> Result<Option<String>, Error> {
     let output = Command::new("git")
         .arg("--git-dir")
         .arg(path)
-        .args(["show", "HEAD:.aurcade.toml"])
+        .args(["show", "HEAD:.aurcade"])
         .output()?;
     if !output.status.success() {
         return Ok(None);
     }
     if output.stdout.len() > 4096 {
-        return Err(".aurcade.toml must be at most 4096 bytes".into());
+        return Err(".aurcade must be at most 4096 bytes".into());
     }
-    let metadata: RepositoryConfig = toml::from_str(std::str::from_utf8(&output.stdout)?)?;
-    if metadata.description.contains(['\n', '\r']) {
-        return Err("repository description must be one line".into());
+    let description = std::str::from_utf8(&output.stdout)?;
+    let description = description.strip_suffix('\n').unwrap_or(description);
+    let description = description.strip_suffix('\r').unwrap_or(description);
+    if description.chars().any(char::is_control) {
+        return Err(".aurcade must contain one plain-text line".into());
     }
-    Ok(Some(metadata.description))
+    Ok((!description.is_empty()).then(|| description.to_owned()))
 }
 
 fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
@@ -639,25 +635,34 @@ mod tests {
         let git_dir = repository.join(".git");
         assert_eq!(repository_metadata_id(&git_dir).unwrap(), None);
 
-        fs::write(repository.join(".aurcade.toml"), "description = \"one\"\n").unwrap();
-        git(&["add", ".aurcade.toml"]);
+        fs::write(repository.join(".aurcade"), "one\n").unwrap();
+        git(&["add", ".aurcade"]);
         git(&["commit", "--quiet", "-m", "add metadata"]);
         let first = repository_metadata_id(&git_dir).unwrap();
         assert!(first.is_some());
+        assert_eq!(
+            repository_description(&git_dir).unwrap().as_deref(),
+            Some("one")
+        );
 
         fs::write(repository.join("README"), "code-only change\n").unwrap();
         git(&["add", "README"]);
         git(&["commit", "--quiet", "-m", "ordinary change"]);
         assert_eq!(repository_metadata_id(&git_dir).unwrap(), first);
 
-        fs::write(repository.join(".aurcade.toml"), "description = \"two\"\n").unwrap();
+        fs::write(repository.join(".aurcade"), "two\n").unwrap();
         git(&["commit", "--quiet", "-am", "change metadata"]);
         assert_ne!(repository_metadata_id(&git_dir).unwrap(), first);
+        assert_eq!(
+            repository_description(&git_dir).unwrap().as_deref(),
+            Some("two")
+        );
 
-        fs::remove_file(repository.join(".aurcade.toml")).unwrap();
+        fs::remove_file(repository.join(".aurcade")).unwrap();
         git(&["add", "-u"]);
         git(&["commit", "--quiet", "-m", "remove metadata"]);
         assert_eq!(repository_metadata_id(&git_dir).unwrap(), None);
+        assert_eq!(repository_description(&git_dir).unwrap(), None);
         fs::remove_dir_all(directory).unwrap();
     }
 

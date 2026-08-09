@@ -72,10 +72,10 @@ git push -u origin main
 
 ## Metadata
 
-Add `.aurcade.toml` to a repository:
+Add `.aurcade` to a repository:
 
-```toml
-description = "A tiny repository with an unnecessarily dramatic README"
+```console
+A tiny repository with an unnecessarily dramatic README
 ```
 
 Metadata refreshes after each push. Repositories shared by multiple accounts appear under `shared`.
