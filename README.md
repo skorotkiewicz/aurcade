@@ -12,6 +12,13 @@ A tiny Git host with cgit over HTTP and authenticated pushes over SSH.
 
 ## Run
 
+Create a directory:
+
+```sh
+mkdir aurcade
+cd aurcade
+```
+
 Create `config.toml`:
 
 ```toml
@@ -34,9 +41,9 @@ docker run -d \
   -p 8080:80 \
   -p 2222:22 \
   -v "$PWD/config.toml:/etc/aurcade/config.toml:ro" \
-  -v aurcade-repositories:/var/lib/aurcade \
-  -v aurcade-ssh-host-keys:/etc/ssh/host_keys \
-  ghcr.io/skorotkiewicz/aurcade
+  -v ./repositories:/var/lib/aurcade \
+  -v ./ssh-host-keys:/etc/ssh/host_keys \
+  ghcr.io/skorotkiewicz/aurcade:latest
 ```
 
 Build locally instead:
