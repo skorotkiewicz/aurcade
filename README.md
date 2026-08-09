@@ -4,49 +4,15 @@
   <img src="assets/aurcade-banner.svg" alt="AURcade retro arcade cabinet — insert SSH key to continue" width="100%">
 </p>
 
-A small Git repository host for static accounts.
+A tiny Git host with cgit over HTTP and authenticated pushes over SSH.
 
 - cgit provides the web interface and HTTP clones.
 - SSH provides authenticated Git access.
 - `config.toml` defines accounts, SSH keys, and repository paths.
 
-## Start
+## Run
 
-1. Copy the example configuration.
-
-   ```sh
-   cp config_example.toml config.toml
-   ```
-
-2. Add each account and its public SSH keys to `config.toml`.
-
-3. Pull and start the published image, `ghcr.io/skorotkiewicz/aurcade`.
-
-   ```sh
-   docker compose -f docker/docker-compose.yml pull
-   docker compose -f docker/docker-compose.yml up -d
-   ```
-
-   To build locally instead:
-
-   ```sh
-   docker compose -f docker/docker-compose.yml up --build -d
-   ```
-
-4. Open <http://localhost:8080>.
-
-The SSH service uses port `2222` on the host.
-
-## Docker run
-
-Create a directory:
-
-```sh
-mkdir aurcade
-cd aurcade
-```
-
-Create `config.toml` with:
+Create `config.toml`:
 
 ```toml
 title = "AURcade"
@@ -61,8 +27,6 @@ ssh_keys = ["ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"]
 paths = ["alice/"]
 ```
 
-Run the published image:
-
 ```sh
 docker run -d \
   --name aurcade \
@@ -75,51 +39,36 @@ docker run -d \
   ghcr.io/skorotkiewicz/aurcade
 ```
 
-Docker creates the two named volumes automatically.
-
-## Configure access
-
-An exact path grants access to one repository:
-
-```toml
-paths = ["example", "team/tools"]
-```
-
-A path with a trailing slash grants access to a namespace. It also permits repository creation on the first push:
-
-```toml
-paths = ["alice/"]
-```
-
-Restart the service after each configuration change:
+Build locally instead:
 
 ```sh
-docker compose -f docker/docker-compose.yml restart
+docker compose -f docker/docker-compose.yml up --build -d
 ```
 
-## Repository metadata
+Open <http://localhost:8080>. After configuration changes, run `docker restart aurcade`.
 
-Commit `.aurcade.toml` to a repository's default branch to set its cgit description:
+## Access
+
+```toml
+paths = ["example", "team/tools"] # An exact path grants access to one repository.
+paths = ["alice/"]  # Namespace; creates repositories on first push.
+```
+
+## Git
+
+```sh
+git clone ssh://git@localhost:2222/example.git
+
+git remote add origin ssh://git@localhost:2222/alice/newrepo.git
+git push -u origin main
+```
+
+## Metadata
+
+Add `.aurcade.toml` to a repository:
 
 ```toml
 description = "A tiny repository with an unnecessarily dramatic README"
 ```
 
-Metadata is refreshed after each successful push. Repositories writable by one account appear in that account's cgit section; repositories writable by multiple accounts appear under `shared`.
-
-## Use SSH
-
-Clone an existing repository:
-
-```sh
-git clone ssh://git@localhost:2222/example.git
-```
-
-Create a repository in an allowed namespace:
-
-```sh
-git remote add origin ssh://git@localhost:2222/alice/newrepo.git
-git push -u origin main
-```
-
-Repository data and SSH host keys remain in `repositories/` and `ssh_host_keys/`.
+Metadata refreshes after each push. Repositories shared by multiple accounts appear under `shared`.
