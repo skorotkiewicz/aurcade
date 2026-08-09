@@ -115,9 +115,6 @@ fn validate_config(config: &Config) -> Result<(), Error> {
         for key in &account.ssh_keys {
             public_key(key)?;
         }
-        for key in &account.gpg_keys {
-            normalize_gpg_public_key(key)?;
-        }
         for path in &account.paths {
             normalize_repo(path)?;
         }
@@ -237,7 +234,7 @@ fn write_signing_trust(config: &Config, root: &Path) -> Result<(), Error> {
     fs::set_permissions(&gnupg, fs::Permissions::from_mode(0o700))?;
 
     let mut allowed_signers = String::new();
-    let mut gpg_keys = String::new();
+    let mut used_gpg = false;
     for account in &config.accounts {
         for key in &account.ssh_keys {
             allowed_signers.push_str(&format!(
@@ -247,38 +244,49 @@ fn write_signing_trust(config: &Config, root: &Path) -> Result<(), Error> {
             ));
         }
         for key in &account.gpg_keys {
-            gpg_keys.push_str(&normalize_gpg_public_key(key)?);
-            gpg_keys.push('\n');
+            let key = match normalize_gpg_public_key(key) {
+                Ok(key) => key,
+                Err(error) => {
+                    eprintln!(
+                        "aurcade: {}: ignoring invalid GPG public key: {error}",
+                        account.name
+                    );
+                    continue;
+                }
+            };
+            let mut child = Command::new("gpg")
+                .arg("--homedir")
+                .arg(&gnupg)
+                .args(["--batch", "--quiet", "--import"])
+                .stdin(Stdio::piped())
+                .spawn()?;
+            used_gpg = true;
+            let write_result = child
+                .stdin
+                .take()
+                .ok_or("failed to open gpg stdin")?
+                .write_all(key.as_bytes());
+            if write_result.is_err() || !child.wait()?.success() {
+                eprintln!(
+                    "aurcade: {}: ignoring GPG public key rejected by gpg",
+                    account.name
+                );
+            }
         }
     }
     let allowed_signers_path = root.join("allowed_signers");
     atomic_write(&allowed_signers_path, &allowed_signers)?;
     fs::set_permissions(allowed_signers_path, fs::Permissions::from_mode(0o644))?;
 
-    if !gpg_keys.is_empty() {
-        let mut child = Command::new("gpg")
-            .arg("--homedir")
-            .arg(&gnupg)
-            .args(["--batch", "--quiet", "--import"])
-            .stdin(Stdio::piped())
-            .spawn()?;
-        child
-            .stdin
-            .take()
-            .ok_or("failed to open gpg stdin")?
-            .write_all(gpg_keys.as_bytes())?;
-        if !child.wait()?.success() {
-            return Err("failed to import configured GPG public keys".into());
-        }
-        if !Command::new("gpgconf")
+    if used_gpg
+        && !Command::new("gpgconf")
             .arg("--homedir")
             .arg(&gnupg)
             .args(["--kill", "gpg-agent"])
             .status()?
             .success()
-        {
-            return Err("failed to stop gpg-agent after public key import".into());
-        }
+    {
+        return Err("failed to stop gpg-agent after public key import".into());
     }
     Ok(())
 }
@@ -652,11 +660,12 @@ mod tests {
             accounts: vec![Account {
                 name: "alice".into(),
                 ssh_keys: vec!["ssh-ed25519 AAAA comment".into()],
-                gpg_keys: vec![],
+                gpg_keys: vec!["0xB498E2E410902F8AEC108F4F5BDC557B496BDB0D".into()],
                 paths: vec!["alice/".into()],
             }],
         };
 
+        validate_config(&config).unwrap();
         write_signing_trust(&config, &directory.join("signing")).unwrap();
         assert_eq!(
             fs::read_to_string(directory.join("signing/allowed_signers")).unwrap(),

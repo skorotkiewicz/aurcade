@@ -90,7 +90,7 @@ gpg_keys = ['''
 ''']
 ```
 
-Export one with `gpg --armor --export FINGERPRINT` and restart AURcade.
+Export one with `gpg --armor --export FINGERPRINT` and restart AURcade. Invalid GPG keys are ignored with a startup warning.
 
 ## Metadata
 
