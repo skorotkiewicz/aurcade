@@ -8,6 +8,8 @@ services:
     volumes:
       - ./config.toml:/etc/aur-repos/config.toml:ro
       - ./repositories:/var/lib/aur-repos
+      - ./ssh_host_keys:/etc/ssh/host_keys
 
 # volumes:
 #   repositories:
+#   ssh_host_keys:
