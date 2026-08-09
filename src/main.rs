@@ -254,7 +254,7 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));
     let mut output = format!(
-        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\nreadme=:README.md\nreadme=:README\n",
+        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nabout-filter=/usr/lib/cgit/filters/about-formatting.sh\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\nreadme=:README.md\nreadme=:README\n",
         config.title,
         config.description,
         config.clone_prefix,

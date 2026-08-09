@@ -7,7 +7,7 @@ RUN cargo build --locked --release
 
 FROM alpine:3.21
 ENV CGIT_CONFIG=/var/lib/aurcade/cgitrc
-RUN apk add --no-cache cgit git highlight lighttpd openssh-server \
+RUN apk add --no-cache cgit git highlight lighttpd openssh-server py3-markdown py3-pygments \
     && sed -i 's/ -X / -O xhtml /' /usr/lib/cgit/filters/syntax-highlighting.sh \
     && highlight -O xhtml --style-outfile=stdout --print-style >> /usr/share/webapps/cgit/cgit.css \
     && adduser -D -h /home/git git \
