@@ -38,7 +38,10 @@ fn run() -> Result<(), Error> {
 
     match env::args().nth(1).as_deref() {
         Some("setup") => setup(&config),
-        Some("serve") => serve(&config, env::args().nth(2).as_deref().ok_or("missing account")?),
+        Some("serve") => serve(
+            &config,
+            env::args().nth(2).as_deref().ok_or("missing account")?,
+        ),
         _ => Err("usage: aur-repos setup | serve ACCOUNT".into()),
     }
 }
@@ -107,7 +110,10 @@ fn public_key(key: &str) -> Result<String, Error> {
 }
 
 fn normalize_repo(path: &str) -> Result<String, Error> {
-    let path = path.trim_matches('/').strip_suffix(".git").unwrap_or(path.trim_matches('/'));
+    let path = path
+        .trim_matches('/')
+        .strip_suffix(".git")
+        .unwrap_or(path.trim_matches('/'));
     if path.is_empty()
         || path.split('/').any(|part| {
             part.is_empty()
@@ -278,6 +284,9 @@ mod tests {
         )
         .unwrap();
         assert!(validate_config(&config).is_ok());
-        assert_eq!(public_key(&config.accounts[0].ssh_keys[0]).unwrap(), "ssh-ed25519 AAAA");
+        assert_eq!(
+            public_key(&config.accounts[0].ssh_keys[0]).unwrap(),
+            "ssh-ed25519 AAAA"
+        );
     }
 }
