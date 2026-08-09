@@ -7,7 +7,9 @@ RUN cargo build --release
 
 FROM alpine:3.21
 ENV CGIT_CONFIG=/var/lib/aur-repos/cgitrc
-RUN apk add --no-cache cgit git lighttpd openssh-server \
+RUN apk add --no-cache cgit git highlight lighttpd openssh-server \
+    && sed -i 's/ -X / -O xhtml /' /usr/lib/cgit/filters/syntax-highlighting.sh \
+    && highlight -O xhtml --style-outfile=stdout --print-style >> /usr/share/webapps/cgit/cgit.css \
     && adduser -D -h /home/git git \
     && install -d -o git -g git /home/git/.ssh /var/lib/aur-repos /etc/aur-repos
 COPY --from=build /src/target/release/aur-repos /usr/local/bin/aur-repos
