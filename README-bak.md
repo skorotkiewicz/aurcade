@@ -23,14 +23,14 @@ A small Git repository host for static accounts.
 3. Pull and start the published image, `ghcr.io/skorotkiewicz/aurcade`.
 
    ```sh
-   docker compose -f docker/docker-compose.yml pull
-   docker compose -f docker/docker-compose.yml up -d
+   docker compose pull
+   docker compose up -d
    ```
 
    To build locally instead:
 
    ```sh
-   docker compose -f docker/docker-compose.yml up --build -d
+   docker compose up --build -d
    ```
 
 4. Open <http://localhost:8080>.
@@ -94,7 +94,7 @@ paths = ["alice/"]
 Restart the service after each configuration change:
 
 ```sh
-docker compose -f docker/docker-compose.yml restart
+docker compose restart
 ```
 
 ## Repository metadata

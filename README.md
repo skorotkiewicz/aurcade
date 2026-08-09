@@ -49,7 +49,7 @@ docker run -d \
 Build locally instead:
 
 ```sh
-docker compose -f docker/docker-compose.yml up --build -d
+docker compose up --build -d
 ```
 
 Open <http://localhost:8080>. After configuration changes, run `docker restart aurcade`.
