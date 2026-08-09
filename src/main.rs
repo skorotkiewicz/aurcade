@@ -158,7 +158,7 @@ fn init_repository(root: &Path, repository: &str) -> Result<(), Error> {
     let path = root.join(format!("{repository}.git"));
     fs::create_dir_all(path.parent().expect("repository parent"))?;
     let status = Command::new("git")
-        .args(["init", "--bare", "--quiet"])
+        .args(["init", "--bare", "--quiet", "--initial-branch=main"])
         .arg(path)
         .status()?;
     if !status.success() {
@@ -254,7 +254,7 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));
     let mut output = format!(
-        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
+        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\nreadme=:README.md\nreadme=:README\n",
         config.title,
         config.description,
         config.clone_prefix,
