@@ -230,7 +230,7 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
     let path = env::var_os("AUR_REPOS_CGIT_CONFIG")
         .or_else(|| env::var_os("CGIT_CONFIG"))
         .map(PathBuf::from)
-        .unwrap_or_else(|| "/etc/cgitrc".into());
+        .unwrap_or_else(|| root.join("cgitrc"));
     let mut output = format!(
         "root-title={}\nvirtual-root=/\nclone-prefix={}\ncss=/cgit.css\nlogo=/cgit.png\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
         config.title, config.clone_prefix
