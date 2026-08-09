@@ -28,7 +28,7 @@ struct Account {
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("aur-repos: {error}");
+        eprintln!("aurcade: {error}");
         process::exit(1);
     }
 }
@@ -43,20 +43,20 @@ fn run() -> Result<(), Error> {
             &config,
             env::args().nth(2).as_deref().ok_or("missing account")?,
         ),
-        _ => Err("usage: aur-repos setup | serve ACCOUNT".into()),
+        _ => Err("usage: aurcade setup | serve ACCOUNT".into()),
     }
 }
 
 fn config_path() -> PathBuf {
-    env::var_os("AUR_REPOS_CONFIG")
+    env::var_os("AURCADE_CONFIG")
         .map(PathBuf::from)
-        .unwrap_or_else(|| "/etc/aur-repos/config.toml".into())
+        .unwrap_or_else(|| "/etc/aurcade/config.toml".into())
 }
 
 fn repo_root() -> PathBuf {
-    env::var_os("AUR_REPOS_ROOT")
+    env::var_os("AURCADE_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|| "/var/lib/aur-repos".into())
+        .unwrap_or_else(|| "/var/lib/aurcade".into())
 }
 
 fn load_config() -> Result<Config, Error> {
@@ -183,14 +183,14 @@ fn setup(config: &Config) -> Result<(), Error> {
 }
 
 fn write_authorized_keys(config: &Config) -> Result<(), Error> {
-    let path = env::var_os("AUR_REPOS_AUTHORIZED_KEYS")
+    let path = env::var_os("AURCADE_AUTHORIZED_KEYS")
         .map(PathBuf::from)
         .unwrap_or_else(|| "/home/git/.ssh/authorized_keys".into());
     let mut output = String::new();
     for account in &config.accounts {
         for key in &account.ssh_keys {
             output.push_str(&format!(
-                "command=\"/usr/local/bin/aur-repos serve {}\",restrict {}\n",
+                "command=\"/usr/local/bin/aurcade serve {}\",restrict {}\n",
                 account.name,
                 public_key(key)?
             ));
@@ -240,7 +240,7 @@ fn cgit_style(config: &Config) -> &str {
 }
 
 fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
-    let path = env::var_os("AUR_REPOS_CGIT_CONFIG")
+    let path = env::var_os("AURCADE_CGIT_CONFIG")
         .or_else(|| env::var_os("CGIT_CONFIG"))
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));

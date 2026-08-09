@@ -1,11 +1,11 @@
 #!/bin/sh
 set -eu
 
-: "${AUR_REPOS_ROOT:=/var/lib/aur-repos}"
-export AUR_REPOS_ROOT
+: "${AURCADE_ROOT:=/var/lib/aurcade}"
+export AURCADE_ROOT
 
-aur-repos setup
-chown -R git:git "$AUR_REPOS_ROOT" /home/git/.ssh
+aurcade setup
+chown -R git:git "$AURCADE_ROOT" /home/git/.ssh
 host_key=/etc/ssh/host_keys/ssh_host_ed25519_key
 install -d -m 700 /etc/ssh/host_keys
 [ -f "$host_key" ] || ssh-keygen -q -t ed25519 -N '' -f "$host_key"

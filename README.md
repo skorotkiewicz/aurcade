@@ -1,4 +1,4 @@
-# aur-repos
+# AURcade
 
 A small Git repository host for static accounts.
 
