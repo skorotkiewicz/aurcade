@@ -43,7 +43,14 @@ div#cgit a:hover { color: var(--accent-strong); text-decoration: none; }
 div#cgit .markdown-body a.toclink { color: var(--text) !important; }
 div#cgit .markdown-body a.toclink:hover { color: var(--accent-strong) !important; }
 div#cgit table#header { margin-bottom: 1.5rem; }
-div#cgit table#header td.logo { display: none; }
+div#cgit table#header td.logo { width: 72px; padding-right: 1rem; }
+div#cgit table#header td.logo img {
+    width: 64px;
+    height: 64px;
+    border: 0;
+    border-radius: 12px;
+    filter: drop-shadow(0 0 8px #49e7ff80);
+}
 div#cgit table#header td.main { padding: 0; font-size: 2rem; font-weight: 700; }
 div#cgit table#header td.main a { color: var(--text); }
 div#cgit table#header td.sub {

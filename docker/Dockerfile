@@ -15,6 +15,7 @@ RUN apk add --no-cache cgit git highlight lighttpd mailcap openssh-server py3-ma
 COPY --from=build /src/target/release/aurcade /usr/local/bin/aurcade
 COPY docker/lighttpd.conf /etc/lighttpd/lighttpd.conf
 COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
+COPY docker/aurcade-logo.svg /usr/share/webapps/cgit/aurcade-logo.svg
 COPY docker/about-filter.py /usr/local/bin/aurcade-about-filter
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint
 RUN passwd -d git \

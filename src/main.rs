@@ -20,6 +20,7 @@ struct Config {
     description: String,
     clone_prefix: String,
     style: Option<String>,
+    logo: Option<String>,
     accounts: Vec<Account>,
 }
 
@@ -90,6 +91,16 @@ fn validate_config(config: &Config) -> Result<(), Error> {
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
     }) {
         return Err("style must be a CSS filename".into());
+    }
+    if config.logo.as_deref().is_some_and(|logo| {
+        ![".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"]
+            .iter()
+            .any(|extension| logo.ends_with(extension))
+            || !logo
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    }) {
+        return Err("logo must be an image filename".into());
     }
 
     let mut names = HashSet::new();
@@ -254,6 +265,10 @@ fn cgit_style(config: &Config) -> &str {
     config.style.as_deref().unwrap_or("cgit.css")
 }
 
+fn cgit_logo(config: &Config) -> &str {
+    config.logo.as_deref().unwrap_or("cgit.png")
+}
+
 fn repository_section<'a>(config: &'a Config, repository: &str) -> Option<&'a str> {
     let mut owners = config
         .accounts
@@ -298,11 +313,12 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));
     let mut output = format!(
-        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nmimetype-file=/etc/mime.types\nabout-filter=/usr/local/bin/aurcade-about-filter\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\nreadme=:README.md\nreadme=:README\n",
+        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo={}\nmimetype-file=/etc/mime.types\nabout-filter=/usr/local/bin/aurcade-about-filter\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\nreadme=:README.md\nreadme=:README\n",
         config.title,
         config.description,
         config.clone_prefix,
-        format_args!("/{}", cgit_style(config))
+        format_args!("/{}", cgit_style(config)),
+        format_args!("/{}", cgit_logo(config))
     );
     let mut repositories = BTreeSet::new();
     configured_repositories(config, root, root, &mut repositories)?;
@@ -466,9 +482,15 @@ mod tests {
         .unwrap();
         assert!(validate_config(&config).is_ok());
         assert_eq!(cgit_style(&config), "cgit.css");
+        assert_eq!(cgit_logo(&config), "cgit.png");
         config.style = Some("cgit-theme.css".into());
+        config.logo = Some("aurcade-logo.svg".into());
         assert!(validate_config(&config).is_ok());
         assert_eq!(cgit_style(&config), "cgit-theme.css");
+        assert_eq!(cgit_logo(&config), "aurcade-logo.svg");
+        config.logo = Some("../outside.svg".into());
+        assert!(validate_config(&config).is_err());
+        config.logo = Some("aurcade-logo.svg".into());
         assert_eq!(
             public_key(&config.accounts[0].ssh_keys[0]).unwrap(),
             "ssh-ed25519 AAAA"
@@ -559,6 +581,7 @@ mod tests {
             description: String::new(),
             clone_prefix: "http://localhost".into(),
             style: None,
+            logo: None,
             accounts: vec![Account {
                 name: "alice".into(),
                 ssh_keys: vec![],
