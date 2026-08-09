@@ -1,0 +1,154 @@
+/* Compact dark theme for cgit. */
+@import url("/cgit.css") layer(default);
+
+:root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-hover: #1f2630;
+    --border: #30363d;
+    --text: #d8dee9;
+    --muted: #8b949e;
+    --accent: #56b6c2;
+    --accent-strong: #61dafb;
+    --green: #7ee787;
+    --red: #ff7b72;
+}
+
+/* Keep stock cgit layout, but do not inherit its light palette. */
+div#cgit,
+div#cgit * {
+    background-color: transparent;
+    border-color: var(--border);
+    color: inherit;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, sans-serif;
+}
+
+div#cgit {
+    box-sizing: border-box;
+    max-width: 1200px;
+    min-height: 100vh;
+    margin: auto;
+    padding: 2rem;
+}
+
+div#cgit a { color: var(--accent); }
+div#cgit a:hover { color: var(--accent-strong); text-decoration: none; }
+div#cgit table#header { margin-bottom: 1.5rem; }
+div#cgit table#header td.logo { display: none; }
+div#cgit table#header td.main { padding: 0; font-size: 2rem; font-weight: 700; }
+div#cgit table#header td.main a { color: var(--text); }
+div#cgit table#header td.sub {
+    padding: .25rem 0 0;
+    border: 0;
+    color: var(--muted);
+}
+
+div#cgit input,
+div#cgit select {
+    box-sizing: border-box;
+    padding: .4rem .6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+}
+
+div#cgit table.tabs {
+    margin-top: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+div#cgit table.tabs td { padding: 0; }
+div#cgit table.tabs td a {
+    display: inline-block;
+    padding: .65rem .85rem;
+    color: var(--muted);
+}
+
+div#cgit table.tabs td a.active {
+    border-bottom: 2px solid var(--accent);
+    background: transparent;
+    color: var(--text);
+}
+
+div#cgit div.path {
+    padding: .65rem 1rem;
+    background: var(--panel);
+    color: var(--muted);
+}
+
+div#cgit div.content {
+    padding: 1.25rem 1rem;
+    border: 1px solid var(--border);
+    border-top: 0;
+    background: var(--bg);
+}
+
+div#cgit table.list tr,
+div#cgit table.list tr.nohover:hover { background: transparent; }
+div#cgit table.list tr:hover { background: var(--panel-hover); }
+div#cgit table.list tr.logheader,
+div#cgit table.list th { background: var(--panel); color: var(--muted); }
+div#cgit table.list th,
+div#cgit table.list td { padding: .55rem .75rem; border-color: var(--border); }
+div#cgit table.list td.sublevel-repo { border-left-color: var(--border); }
+div#cgit table.list td.reposection { background: var(--panel); color: var(--text); }
+
+div#cgit div.commit-subject,
+div#cgit div.commit-msg,
+div#cgit div.notes,
+div#cgit table.commit-info,
+div#cgit div.cgit-panel {
+    border-color: var(--border);
+    background: var(--panel);
+    color: var(--text);
+}
+
+div#cgit table.commit-info th,
+div#cgit div.cgit-panel th { background: var(--panel-hover); color: var(--muted); }
+div#cgit table.commit-info td,
+div#cgit div.cgit-panel td { border-color: var(--border); }
+
+div#cgit table.blob,
+div#cgit table.diff { border-color: var(--border); background: var(--panel); }
+div#cgit table.blob td.linenumbers {
+    border-color: var(--border);
+    background: var(--bg);
+    color: var(--muted);
+}
+div#cgit table.blob pre { color: var(--text); }
+div#cgit table.diff td div.head { background: var(--panel-hover); color: var(--muted); }
+div#cgit table.diff td div.hunk { color: var(--accent); }
+div#cgit table.diff td div.add { background: #132a1b; color: var(--green); }
+div#cgit table.diff td div.del { background: #321c20; color: var(--red); }
+div#cgit table.diffstat td.graph td.add { background: var(--green); }
+div#cgit table.diffstat td.graph td.rem { background: var(--red); }
+
+div#cgit a.branch-deco { background: #21452a; color: var(--green); }
+div#cgit a.tag-deco { background: #4a3b16; color: #e3b341; }
+div#cgit a.remote-deco { background: #173a45; color: var(--accent-strong); }
+div#cgit div.footer { margin-top: 2rem; border-color: var(--border); color: var(--muted); }
+
+div#cgit .hl.num { color: #d19a66; }
+div#cgit .hl.sng { color: #98c379; }
+div#cgit .hl.slc,
+div#cgit .hl.com { color: #7f848e; font-style: italic; }
+div#cgit .hl.ppc { color: #c678dd; }
+div#cgit .hl.opt { color: var(--text); }
+div#cgit .hl.kwa { color: #c678dd; font-weight: 600; }
+div#cgit .hl.kwb { color: #61afef; }
+div#cgit .hl.kwc { color: #e5c07b; }
+
+@media (max-width: 700px) {
+    div#cgit { padding: 1rem; }
+    div#cgit table#header td.form,
+    div#cgit table.tabs td.form { display: none; }
+    div#cgit div.content { overflow-x: auto; }
+}

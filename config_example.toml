@@ -1,5 +1,7 @@
 title = "AUR repositories"
 clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
+# Optional CSS filename; defaults to cgit.css.
+# style = "cgit-theme.css"
 
 # Restart the container after changing accounts, keys, or paths.
 [[accounts]]

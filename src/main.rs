@@ -14,6 +14,7 @@ type Error = Box<dyn std::error::Error>;
 struct Config {
     title: String,
     clone_prefix: String,
+    style: Option<String>,
     accounts: Vec<Account>,
 }
 
@@ -67,6 +68,14 @@ fn load_config() -> Result<Config, Error> {
 fn validate_config(config: &Config) -> Result<(), Error> {
     if config.title.contains(['\n', '\r']) || config.clone_prefix.contains(['\n', '\r']) {
         return Err("title and clone_prefix must be one line".into());
+    }
+    if config.style.as_deref().is_some_and(|style| {
+        !style.ends_with(".css")
+            || !style
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    }) {
+        return Err("style must be a CSS filename".into());
     }
 
     let mut names = HashSet::new();
@@ -226,14 +235,20 @@ fn configured_repositories(
     Ok(())
 }
 
+fn cgit_style(config: &Config) -> &str {
+    config.style.as_deref().unwrap_or("cgit.css")
+}
+
 fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
     let path = env::var_os("AUR_REPOS_CGIT_CONFIG")
         .or_else(|| env::var_os("CGIT_CONFIG"))
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));
     let mut output = format!(
-        "root-title={}\nvirtual-root=/\nclone-prefix={}\ncss=/cgit.css\nlogo=/cgit.png\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
-        config.title, config.clone_prefix
+        "root-title={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
+        config.title,
+        config.clone_prefix,
+        format_args!("/{}", cgit_style(config))
     );
     let mut repositories = BTreeSet::new();
     configured_repositories(config, root, root, &mut repositories)?;
@@ -330,7 +345,7 @@ mod tests {
 
     #[test]
     fn validates_static_config() {
-        let config: Config = toml::from_str(
+        let mut config: Config = toml::from_str(
             r#"
                 title = "Repositories"
                 clone_prefix = "http://localhost:8080/cgit.cgi"
@@ -342,6 +357,10 @@ mod tests {
         )
         .unwrap();
         assert!(validate_config(&config).is_ok());
+        assert_eq!(cgit_style(&config), "cgit.css");
+        config.style = Some("cgit-theme.css".into());
+        assert!(validate_config(&config).is_ok());
+        assert_eq!(cgit_style(&config), "cgit-theme.css");
         assert_eq!(
             public_key(&config.accounts[0].ssh_keys[0]).unwrap(),
             "ssh-ed25519 AAAA"

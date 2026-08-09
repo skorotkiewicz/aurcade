@@ -14,6 +14,7 @@ RUN apk add --no-cache cgit git highlight lighttpd openssh-server \
     && install -d -o git -g git /home/git/.ssh /var/lib/aur-repos /etc/aur-repos
 COPY --from=build /src/target/release/aur-repos /usr/local/bin/aur-repos
 COPY lighttpd.conf /etc/lighttpd/lighttpd.conf
+COPY cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
 COPY entrypoint.sh /usr/local/bin/entrypoint
 RUN passwd -d git \
     && chmod +x /usr/local/bin/entrypoint \
