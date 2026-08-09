@@ -12,8 +12,9 @@ RUN apk add --no-cache cgit git lighttpd openssh-server \
 COPY --from=build /src/target/release/aur-repos /usr/local/bin/aur-repos
 COPY lighttpd.conf /etc/lighttpd/lighttpd.conf
 COPY entrypoint.sh /usr/local/bin/entrypoint
-RUN chmod +x /usr/local/bin/entrypoint \
-    && printf '\nPasswordAuthentication no\nPermitRootLogin no\nAllowUsers git\n' >> /etc/ssh/sshd_config
+RUN passwd -d git \
+    && chmod +x /usr/local/bin/entrypoint \
+    && printf '\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers git\n' >> /etc/ssh/sshd_config
 EXPOSE 22 80
 VOLUME ["/var/lib/aur-repos"]
 ENTRYPOINT ["/usr/local/bin/entrypoint"]

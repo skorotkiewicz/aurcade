@@ -7,7 +7,7 @@ services:
       - "2222:22"
     volumes:
       - ./config.toml:/etc/aur-repos/config.toml:ro
-      - repositories:/var/lib/aur-repos
+      - ./repositories:/var/lib/aur-repos
 
-volumes:
-  repositories:
+# volumes:
+#   repositories:
