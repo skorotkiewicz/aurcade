@@ -46,6 +46,13 @@ docker run -d \
   ghcr.io/skorotkiewicz/aurcade:latest
 ```
 
+With Compose:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
 Build locally instead:
 
 ```sh
