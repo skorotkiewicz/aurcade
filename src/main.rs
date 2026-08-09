@@ -232,7 +232,7 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
         .map(PathBuf::from)
         .unwrap_or_else(|| "/etc/cgitrc".into());
     let mut output = format!(
-        "root-title={}\nclone-prefix={}\ncss=/cgit.css\nlogo=/cgit.png\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
+        "root-title={}\nvirtual-root=/\nclone-prefix={}\ncss=/cgit.css\nlogo=/cgit.png\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
         config.title, config.clone_prefix
     );
     let mut repositories = BTreeSet::new();

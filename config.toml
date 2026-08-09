@@ -1,5 +1,5 @@
 title = "AUR repositories"
-clone_prefix = "http://localhost:8080/cgit.cgi"
+clone_prefix = "http://localhost:8080"
 
 # Restart the container after changing accounts, keys, or paths.
 [[accounts]]
