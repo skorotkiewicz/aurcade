@@ -32,16 +32,6 @@ install-hook:
 remove-hook:
     @rm .git/hooks/pre-commit
 
-# `just push-all main`
-push-all BRANCH="main":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    mapfile -t remotes < <(git remote)
-    ((${#remotes[@]})) || { echo "No remotes configured"; exit 1; }
-    for remote in "${remotes[@]}"; do
-        git push "$remote" "{{ BRANCH }}"
-    done
-
 add-tag ORIGIN="origin":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -59,3 +49,38 @@ remove-tag ORIGIN="origin" VERSION="":
     [ -z "$tag" ] && echo "No tag selected" && exit 1
     git tag -d "$tag"
     git push --delete "{{ ORIGIN }}" "$tag"
+
+# `just push-all main`
+push-all BRANCH="main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t remotes < <(git remote)
+    ((${#remotes[@]})) || { echo "No remotes configured"; exit 1; }
+    for remote in "${remotes[@]}"; do
+        git push "$remote" "{{ BRANCH }}"
+    done
+
+# add-tag-all:
+#     #!/usr/bin/env bash
+#     set -euo pipefail
+#     VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+#     just push-all main
+#     git tag -a "v${VERSION}" -m "Release v${VERSION}"
+#     mapfile -t remotes < <(git remote)
+#     for remote in "${remotes[@]}"; do
+#         git push "$remote" "v${VERSION}"
+#     done
+
+# # `just remove-tag-all v0.0.0` or `just remove-tag-all` (uses fzf)
+# remove-tag-all VERSION="":
+#     #!/usr/bin/env bash
+#     set -euo pipefail
+#     mapfile -t remotes < <(git remote)
+#     ((${#remotes[@]})) || { echo "No remotes configured"; exit 1; }
+#     tag="{{ VERSION }}"
+#     [ -z "$tag" ] && tag=$(git tag | sort -V | fzf --prompt="Select tag to remove: ")
+#     [ -z "$tag" ] && echo "No tag selected" && exit 1
+#     git tag -d "$tag"
+#     for remote in "${remotes[@]}"; do
+#         git push --delete "$remote" "$tag"
+#     done
