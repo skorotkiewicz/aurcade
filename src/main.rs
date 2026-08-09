@@ -128,6 +128,28 @@ fn normalize_repo(path: &str) -> Result<String, Error> {
     Ok(path.to_owned())
 }
 
+fn path_matches(rule: &str, repository: &str) -> bool {
+    let path = normalize_repo(rule).expect("validated repository path");
+    if rule.ends_with('/') {
+        repository.starts_with(&format!("{path}/"))
+    } else {
+        repository == path
+    }
+}
+
+fn init_repository(root: &Path, repository: &str) -> Result<(), Error> {
+    let path = root.join(format!("{repository}.git"));
+    fs::create_dir_all(path.parent().expect("repository parent"))?;
+    let status = Command::new("git")
+        .args(["init", "--bare", "--quiet"])
+        .arg(path)
+        .status()?;
+    if !status.success() {
+        return Err(format!("git init failed for {repository}").into());
+    }
+    Ok(())
+}
+
 fn setup(config: &Config) -> Result<(), Error> {
     let root = repo_root();
     fs::create_dir_all(&root)?;
@@ -136,25 +158,18 @@ fn setup(config: &Config) -> Result<(), Error> {
         .accounts
         .iter()
         .flat_map(|account| account.paths.iter())
+        .filter(|path| !path.ends_with('/'))
         .map(|path| normalize_repo(path).expect("validated repository path"))
         .collect();
 
     for path in &paths {
-        let repository = root.join(format!("{path}.git"));
-        if !repository.join("HEAD").is_file() {
-            fs::create_dir_all(repository.parent().expect("repository parent"))?;
-            let status = Command::new("git")
-                .args(["init", "--bare", "--quiet"])
-                .arg(&repository)
-                .status()?;
-            if !status.success() {
-                return Err(format!("git init failed for {path}").into());
-            }
+        if !root.join(format!("{path}.git/HEAD")).is_file() {
+            init_repository(&root, path)?;
         }
     }
 
     write_authorized_keys(config)?;
-    write_cgit_config(config, &root, &paths)?;
+    write_cgit_config(config, &root)?;
     Ok(())
 }
 
@@ -177,15 +192,52 @@ fn write_authorized_keys(config: &Config) -> Result<(), Error> {
     Ok(())
 }
 
-fn write_cgit_config(config: &Config, root: &Path, paths: &BTreeSet<String>) -> Result<(), Error> {
+fn configured_repositories(
+    config: &Config,
+    root: &Path,
+    directory: &Path,
+    repositories: &mut BTreeSet<String>,
+) -> Result<(), Error> {
+    for entry in fs::read_dir(directory)? {
+        let path = entry?.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.join("HEAD").is_file() {
+            if let Some(repository) = path
+                .strip_prefix(root)?
+                .to_str()
+                .and_then(|path| path.strip_suffix(".git"))
+                .filter(|path| normalize_repo(path).is_ok())
+                .filter(|path| {
+                    config
+                        .accounts
+                        .iter()
+                        .flat_map(|account| account.paths.iter())
+                        .any(|rule| path_matches(rule, path))
+                })
+            {
+                repositories.insert(repository.to_owned());
+            }
+        } else {
+            configured_repositories(config, root, &path, repositories)?;
+        }
+    }
+    Ok(())
+}
+
+fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
     let path = env::var_os("AUR_REPOS_CGIT_CONFIG")
+        .or_else(|| env::var_os("CGIT_CONFIG"))
         .map(PathBuf::from)
         .unwrap_or_else(|| "/etc/cgitrc".into());
     let mut output = format!(
         "root-title={}\nclone-prefix={}\ncss=/cgit.css\nlogo=/cgit.png\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
         config.title, config.clone_prefix
     );
-    for repository in paths {
+    let mut repositories = BTreeSet::new();
+    configured_repositories(config, root, root, &mut repositories)?;
+    for repository in repositories {
         output.push_str(&format!(
             "\nrepo.url={repository}\nrepo.path={}/{repository}.git\n",
             root.display()
@@ -196,7 +248,7 @@ fn write_cgit_config(config: &Config, root: &Path, paths: &BTreeSet<String>) -> 
 
 fn atomic_write(path: &Path, contents: &str) -> Result<(), Error> {
     fs::create_dir_all(path.parent().ok_or("output path has no parent")?)?;
-    let temporary = path.with_extension("tmp");
+    let temporary = path.with_extension(format!("tmp.{}", process::id()));
     fs::write(&temporary, contents)?;
     fs::rename(temporary, path)?;
     Ok(())
@@ -211,27 +263,33 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     let original = env::var("SSH_ORIGINAL_COMMAND").map_err(|_| "Git command required")?;
     let (action, repository) = parse_git_command(&original)?;
 
-    let configured: BTreeSet<String> = config
+    let configured = config
         .accounts
         .iter()
         .flat_map(|account| account.paths.iter())
-        .map(|path| normalize_repo(path).expect("validated repository path"))
-        .collect();
-    let writable: BTreeSet<String> = account
+        .any(|path| path_matches(path, &repository));
+    let writable = account
         .paths
         .iter()
-        .map(|path| normalize_repo(path).expect("validated repository path"))
-        .collect();
+        .any(|path| path_matches(path, &repository));
 
-    if !configured.contains(&repository)
-        || (action == "git-receive-pack" && !writable.contains(&repository))
-    {
+    if !configured || (action == "git-receive-pack" && !writable) {
         return Err(format!("access denied: {repository}").into());
     }
 
-    let path = repo_root().join(format!("{repository}.git"));
+    let root = repo_root();
+    let path = root.join(format!("{repository}.git"));
     if !path.join("HEAD").is_file() {
-        return Err(format!("repository not initialized: {repository}").into());
+        let creatable = action == "git-receive-pack"
+            && account
+                .paths
+                .iter()
+                .any(|rule| rule.ends_with('/') && path_matches(rule, &repository));
+        if !creatable {
+            return Err(format!("repository not initialized: {repository}").into());
+        }
+        init_repository(&root, &repository)?;
+        write_cgit_config(config, &root)?;
     }
 
     let error = Command::new(action).arg(path).exec();
@@ -279,7 +337,7 @@ mod tests {
                 [[accounts]]
                 name = "alice"
                 ssh_keys = ["ssh-ed25519 AAAA comment"]
-                paths = ["alice/pkg", "shared"]
+                paths = ["alice/", "shared"]
             "#,
         )
         .unwrap();
@@ -288,5 +346,11 @@ mod tests {
             public_key(&config.accounts[0].ssh_keys[0]).unwrap(),
             "ssh-ed25519 AAAA"
         );
+        assert!(path_matches("alice/", "alice/existing"));
+        assert!(path_matches("alice/", "alice/newrepo"));
+        assert!(!path_matches("alice/", "alice"));
+        assert!(!path_matches("alice/", "alice-other/repo"));
+        assert!(path_matches("shared", "shared"));
+        assert!(!path_matches("shared", "shared/child"));
     }
 }

@@ -6,6 +6,7 @@ COPY src ./src
 RUN cargo build --release
 
 FROM alpine:3.21
+ENV CGIT_CONFIG=/var/lib/aur-repos/cgitrc
 RUN apk add --no-cache cgit git lighttpd openssh-server \
     && adduser -D -h /home/git git \
     && install -d -o git -g git /home/git/.ssh /var/lib/aur-repos /etc/aur-repos
