@@ -13,6 +13,8 @@ type Error = Box<dyn std::error::Error>;
 #[serde(deny_unknown_fields)]
 struct Config {
     title: String,
+    #[serde(default)]
+    description: String,
     clone_prefix: String,
     style: Option<String>,
     accounts: Vec<Account>,
@@ -66,8 +68,11 @@ fn load_config() -> Result<Config, Error> {
 }
 
 fn validate_config(config: &Config) -> Result<(), Error> {
-    if config.title.contains(['\n', '\r']) || config.clone_prefix.contains(['\n', '\r']) {
-        return Err("title and clone_prefix must be one line".into());
+    if config.title.contains(['\n', '\r'])
+        || config.description.contains(['\n', '\r'])
+        || config.clone_prefix.contains(['\n', '\r'])
+    {
+        return Err("title, description, and clone_prefix must be one line".into());
     }
     if config.style.as_deref().is_some_and(|style| {
         !style.ends_with(".css")
@@ -245,8 +250,9 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));
     let mut output = format!(
-        "root-title={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
+        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo=/cgit.png\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\n",
         config.title,
+        config.description,
         config.clone_prefix,
         format_args!("/{}", cgit_style(config))
     );
@@ -348,6 +354,7 @@ mod tests {
         let mut config: Config = toml::from_str(
             r#"
                 title = "Repositories"
+                description = "Hosted Git repositories"
                 clone_prefix = "http://localhost:8080/cgit.cgi"
                 [[accounts]]
                 name = "alice"
@@ -371,5 +378,17 @@ mod tests {
         assert!(!path_matches("alice/", "alice-other/repo"));
         assert!(path_matches("shared", "shared"));
         assert!(!path_matches("shared", "shared/child"));
+        assert_eq!(
+            toml::from_str::<Config>(
+                r#"
+                    title = "Repositories"
+                    clone_prefix = "http://localhost:8080/cgit.cgi"
+                    accounts = []
+                "#,
+            )
+            .unwrap()
+            .description,
+            ""
+        );
     }
 }
