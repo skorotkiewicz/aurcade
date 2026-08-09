@@ -1,49 +1,100 @@
 diff --git a/cgit.css b/cgit.css
-index d10a24d..c73cad7 100644
+index d10a24d..531efa8 100644
 --- a/cgit.css
 +++ b/cgit.css
-@@ -439,6 +439,36 @@ div#cgit table.commit-info td {
+@@ -439,6 +439,87 @@ div#cgit table.commit-info td {
  	padding: 0.1em 1em 0.1em 0.1em;
  }
  
-+div#cgit span.signature {
++div#cgit .signature {
 +	display: inline-block;
 +	padding: 0.1em 0.4em;
 +	border: solid 1px;
 +	border-radius: 2px;
++	font: inherit;
 +	font-weight: bold;
 +}
 +
-+div#cgit span.signature.verified {
++div#cgit button.signature {
++	cursor: pointer;
++}
++
++div#cgit .signature.verified {
 +	color: #116329;
 +	background-color: #dafbe1;
 +	border-color: #4ac26b;
 +}
 +
-+div#cgit span.signature.invalid {
++div#cgit .signature.invalid {
 +	color: #82071e;
 +	background-color: #ffebe9;
 +	border-color: #ff8182;
 +}
 +
-+div#cgit span.signature.unverified {
++div#cgit .signature.unverified {
 +	color: #57606a;
 +	background-color: #f6f8fa;
 +	border-color: #afb8c1;
 +}
 +
-+div#cgit table.commit-info tr:has(span.signature.unverified) {
++div#cgit table.commit-info tr:has(.signature.unverified) {
 +	display: none;
++}
++
++div#cgit div.signature-popover {
++	box-sizing: border-box;
++	width: min(24em, calc(100% - 2em));
++	padding: 1em;
++	border: solid 1px #aaa;
++	border-radius: 8px;
++	background: #fff;
++	color: #222;
++	box-shadow: 0 8px 32px #0004;
++}
++
++div#cgit div.signature-popover::backdrop {
++	background: #0006;
++}
++
++div#cgit button.signature-close {
++	float: right;
++	padding: 0;
++	border: 0;
++	background: none;
++	color: inherit;
++	font-size: 1.25em;
++	cursor: pointer;
++}
++
++div#cgit p.signature-summary {
++	margin: 0 2em 1em 0;
++	font-weight: bold;
++}
++
++div#cgit div.signature-popover dl {
++	display: grid;
++	grid-template-columns: max-content 1fr;
++	gap: 0.4em 0.8em;
++	margin: 0;
++}
++
++div#cgit div.signature-popover dt {
++	font-weight: bold;
++}
++
++div#cgit div.signature-popover dd {
++	margin: 0;
++	overflow-wrap: anywhere;
 +}
 +
  div#cgit div.commit-subject {
  	font-weight: bold;
  	font-size: 125%;
 diff --git a/ui-commit.c b/ui-commit.c
-index 972e9bc..49e5036 100644
+index 972e9bc..9c1b9f1 100644
 --- a/ui-commit.c
 +++ b/ui-commit.c
-@@ -9,12 +9,46 @@
+@@ -9,12 +9,70 @@
  #define USE_THE_REPOSITORY_VARIABLE
  
  #include "cgit.h"
@@ -59,12 +110,14 @@ index 972e9bc..49e5036 100644
 +	struct signature_check signature = { 0 };
 +	const char *class = "unverified";
 +	const char *label = "Unverified";
++	int verified;
 +
 +	check_commit_signature(commit, &signature);
 +	if (!signature.payload)
 +		goto out;
 +
-+	if (signature.result == 'G') {
++	verified = signature.result == 'G' && signature.signer;
++	if (verified) {
 +		class = "verified";
 +		label = "Verified";
 +	} else if (signature.result == 'B') {
@@ -73,13 +126,35 @@ index 972e9bc..49e5036 100644
 +	}
 +
 +	html("<tr><th>signature</th><td colspan='2'>");
-+	htmlf("<span class='signature %s'>%s</span>", class, label);
++	if (verified)
++		html("<button type='button' class='signature verified' popovertarget='commit-signature-details'>Verified</button>");
++	else
++		htmlf("<span class='signature %s'>%s</span>", class, label);
 +	if (signature.signer) {
 +		html(" ");
 +		html_txt(signature.signer);
 +	} else if (signature.fingerprint) {
 +		html(" ");
 +		html_txt(signature.fingerprint);
++	}
++	if (verified) {
++		html("<div class='signature-popover' id='commit-signature-details' popover>");
++		html("<button type='button' class='signature-close' popovertarget='commit-signature-details' popovertargetaction='hide' aria-label='Close'>&times;</button>");
++		html("<p class='signature-summary'>This commit was signed with a verified signature.</p><dl>");
++		html("<dt>Signer</dt><dd>");
++		html_txt(signature.signer);
++		html("</dd>");
++		if (signature.key) {
++			html("<dt>Signing key</dt><dd>");
++			html_txt(signature.key);
++			html("</dd>");
++		}
++		if (signature.fingerprint) {
++			html("<dt>Fingerprint</dt><dd>");
++			html_txt(signature.fingerprint);
++			html("</dd>");
++		}
++		html("</dl></div>");
 +	}
 +	html("</td></tr>\n");
 +
@@ -90,7 +165,7 @@ index 972e9bc..49e5036 100644
  void cgit_print_commit(char *hex, const char *prefix)
  {
  	struct commit *commit, *parent;
-@@ -73,6 +107,7 @@ void cgit_print_commit(char *hex, const char *prefix)
+@@ -73,6 +131,7 @@ void cgit_print_commit(char *hex, const char *prefix)
  	html_txt(show_date(info->committer_date, info->committer_tz,
  				cgit_date_mode(DATE_ISO8601)));
  	html("</td></tr>\n");

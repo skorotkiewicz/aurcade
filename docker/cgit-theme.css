@@ -48,29 +48,65 @@ div#cgit a.deco {
     font-weight: 600;
 }
 div#cgit a:hover { color: var(--accent-strong); text-decoration: none; }
-div#cgit span.signature {
+div#cgit .signature {
     display: inline-block;
     padding: .1rem .4rem;
     border: 1px solid var(--border);
     border-radius: 4px;
+    font: inherit;
     font-weight: 600;
 }
-div#cgit span.signature.verified {
+div#cgit button.signature { cursor: pointer; }
+div#cgit .signature.verified {
     border-color: #7ee78766;
     background: #7ee7871a;
     color: var(--green);
 }
-div#cgit span.signature.invalid {
+div#cgit .signature.invalid {
     border-color: #ff7b7266;
     background: #ff7b721a;
     color: var(--red);
 }
-div#cgit span.signature.unverified {
+div#cgit .signature.unverified {
     background: var(--panel-hover);
     color: var(--muted);
 }
-div#cgit table.commit-info tr:has(span.signature.unverified) {
-    display: none;
+div#cgit table.commit-info tr:has(.signature.unverified) { display: none; }
+div#cgit div.signature-popover {
+    box-sizing: border-box;
+    width: min(24rem, calc(100% - 2rem));
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: 0 12px 40px #000a;
+}
+div#cgit div.signature-popover::backdrop { background: #0009; }
+div#cgit button.signature-close {
+    float: right;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+div#cgit button.signature-close:hover { color: var(--text); }
+div#cgit p.signature-summary {
+    margin: 0 2rem 1rem 0;
+    font-weight: 600;
+}
+div#cgit div.signature-popover dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: .4rem .8rem;
+    margin: 0;
+}
+div#cgit div.signature-popover dt { color: var(--muted); }
+div#cgit div.signature-popover dd {
+    margin: 0;
+    overflow-wrap: anywhere;
 }
 div#cgit .markdown-body a.toclink { color: var(--text) !important; }
 div#cgit .markdown-body a.toclink:hover { color: var(--accent-strong) !important; }
