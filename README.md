@@ -31,6 +31,8 @@ logo = "aurcade-logo.svg"
 [[accounts]]
 name = "alice"
 ssh_keys = ["ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"]
+gpg_keys = []
+gpg_key_files = []
 paths = ["alice/"]
 ```
 
@@ -41,6 +43,7 @@ docker run -d \
   -p 8080:80 \
   -p 2222:22 \
   -v "$PWD/config.toml:/etc/aurcade/config.toml:ro" \
+  -v "$PWD/keys:/etc/aurcade/keys:ro" \
   -v ./repositories:/var/lib/aurcade \
   -v ./ssh-host-keys:/etc/ssh/host_keys \
   ghcr.io/skorotkiewicz/aurcade:latest
@@ -76,6 +79,26 @@ git clone ssh://git@localhost:2222/example.git
 git remote add origin ssh://git@localhost:2222/alice/newrepo.git
 git push -u origin main
 ```
+
+## Signed commits
+
+SSH-signed commits are verified with the account's `ssh_keys`. For GPG signatures, add complete armored public keys:
+
+```toml
+gpg_keys = ['''
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+...
+-----END PGP PUBLIC KEY BLOCK-----
+''']
+```
+
+Export one with `gpg --armor --export FINGERPRINT`. Alternatively, reference public-key files available inside the container:
+
+```toml
+gpg_key_files = ["keys/alice.asc"]
+```
+
+Key-file paths must begin with `keys/`, relative to `config.toml`. Invalid or missing GPG keys are ignored with a startup warning. Restart AURcade after changing keys.
 
 ## Metadata
 
