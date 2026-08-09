@@ -1,10 +1,13 @@
 use serde::Deserialize;
 use std::{
     collections::{BTreeSet, HashSet},
-    env, fs, io,
-    os::unix::{fs::PermissionsExt, process::CommandExt},
+    env,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{self, Command},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 type Error = Box<dyn std::error::Error>;
@@ -213,10 +216,11 @@ fn configured_repositories(
     repositories: &mut BTreeSet<String>,
 ) -> Result<(), Error> {
     for entry in fs::read_dir(directory)? {
-        let path = entry?.path();
-        if !path.is_dir() {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
             continue;
         }
+        let path = entry.path();
         if path.join("HEAD").is_file() {
             if let Some(repository) = path
                 .strip_prefix(root)?
@@ -270,8 +274,24 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
 fn atomic_write(path: &Path, contents: &str) -> Result<(), Error> {
     fs::create_dir_all(path.parent().ok_or("output path has no parent")?)?;
     let temporary = path.with_extension(format!("tmp.{}", process::id()));
-    fs::write(&temporary, contents)?;
+    match fs::remove_file(&temporary) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    file.write_all(contents.as_bytes())?;
     fs::rename(temporary, path)?;
+    Ok(())
+}
+
+fn cleanup_failed_creation(path: &Path, created: bool, success: bool) -> Result<(), Error> {
+    if created && !success {
+        fs::remove_dir_all(path)?;
+    }
     Ok(())
 }
 
@@ -299,8 +319,10 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     }
 
     let root = repo_root();
-    let path = root.join(format!("{repository}.git"));
-    if !path.join("HEAD").is_file() {
+    let destination = root.join(format!("{repository}.git"));
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let staging = root.join(format!(".aurcade@staging-{}-{nonce}", process::id()));
+    let created = if !destination.join("HEAD").is_file() {
         let creatable = action == "git-receive-pack"
             && account
                 .paths
@@ -309,12 +331,38 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
         if !creatable {
             return Err(format!("repository not initialized: {repository}").into());
         }
-        init_repository(&root, &repository)?;
+        init_repository(&staging, &repository)?;
+        true
+    } else {
+        false
+    };
+    let path = if created {
+        staging.join(format!("{repository}.git"))
+    } else {
+        destination.clone()
+    };
+
+    let status = match Command::new(action).arg(&path).status() {
+        Ok(status) => status,
+        Err(error) => {
+            cleanup_failed_creation(&staging, created, false)?;
+            return Err(error.into());
+        }
+    };
+    cleanup_failed_creation(&staging, created, status.success())?;
+    if !status.success() {
+        return Err(format!("{action} failed for {repository}").into());
+    }
+    if created {
+        fs::create_dir_all(destination.parent().expect("repository parent"))?;
+        if let Err(error) = fs::rename(&path, &destination) {
+            fs::remove_dir_all(&staging)?;
+            return Err(error.into());
+        }
+        fs::remove_dir_all(&staging)?;
         write_cgit_config(config, &root)?;
     }
-
-    let error = Command::new(action).arg(path).exec();
-    Err(io::Error::new(error.kind(), format!("could not run {action}: {error}")).into())
+    Ok(())
 }
 
 fn parse_git_command(command: &str) -> Result<(&str, String), Error> {
@@ -390,5 +438,71 @@ mod tests {
             .description,
             ""
         );
+    }
+
+    fn test_directory(name: &str) -> PathBuf {
+        let path = env::temp_dir().join(format!("aurcade-{name}-{}", process::id()));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn atomic_write_does_not_follow_temporary_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let directory = test_directory("atomic-write");
+        let output = directory.join("cgitrc");
+        let victim = directory.join("victim");
+        fs::write(&victim, "unchanged").unwrap();
+        symlink(
+            &victim,
+            output.with_extension(format!("tmp.{}", process::id())),
+        )
+        .unwrap();
+
+        atomic_write(&output, "generated").unwrap();
+        assert_eq!(fs::read_to_string(victim).unwrap(), "unchanged");
+        assert_eq!(fs::read_to_string(output).unwrap(), "generated");
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn repository_scan_ignores_symlinked_directories() {
+        use std::os::unix::fs::symlink;
+
+        let directory = test_directory("repository-symlink");
+        let root = directory.join("root");
+        let external = directory.join("external");
+        fs::create_dir_all(&root).unwrap();
+        init_repository(&external, "secret").unwrap();
+        symlink(&external, root.join("external")).unwrap();
+        let config = Config {
+            title: "Repositories".into(),
+            description: String::new(),
+            clone_prefix: "http://localhost".into(),
+            style: None,
+            accounts: vec![Account {
+                name: "alice".into(),
+                ssh_keys: vec![],
+                paths: vec!["external/".into()],
+            }],
+        };
+        let mut repositories = BTreeSet::new();
+
+        configured_repositories(&config, &root, &root, &mut repositories).unwrap();
+        assert!(repositories.is_empty());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn failed_first_push_is_removed() {
+        let directory = test_directory("failed-push");
+        let repository = directory.join("new.git");
+        init_repository(&directory, "new").unwrap();
+
+        cleanup_failed_creation(&repository, true, false).unwrap();
+        assert!(!repository.exists());
+        fs::remove_dir_all(directory).unwrap();
     }
 }

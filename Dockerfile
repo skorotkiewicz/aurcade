@@ -3,7 +3,7 @@ WORKDIR /src
 RUN apk add --no-cache musl-dev
 COPY Cargo.toml Cargo.lock* ./
 COPY src ./src
-RUN cargo build --release
+RUN cargo build --locked --release
 
 FROM alpine:3.21
 ENV CGIT_CONFIG=/var/lib/aurcade/cgitrc
