@@ -1,7 +1,9 @@
-name: aur-repos
+name: aurcade
 
 services:
   aurcade:
+    image: ghcr.io/skorotkiewicz/aurcade
+    container_name: aurcade
     build:
       context: ..
       dockerfile: docker/Dockerfile
