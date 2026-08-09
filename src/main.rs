@@ -6,7 +6,7 @@ use std::{
     io::{self, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    process::{self, Command},
+    process::{self, Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -29,6 +29,8 @@ struct Config {
 struct Account {
     name: String,
     ssh_keys: Vec<String>,
+    #[serde(default)]
+    gpg_keys: Vec<String>,
     paths: Vec<String>,
 }
 
@@ -113,6 +115,9 @@ fn validate_config(config: &Config) -> Result<(), Error> {
         for key in &account.ssh_keys {
             public_key(key)?;
         }
+        for key in &account.gpg_keys {
+            normalize_gpg_public_key(key)?;
+        }
         for path in &account.paths {
             normalize_repo(path)?;
         }
@@ -135,6 +140,19 @@ fn public_key(key: &str) -> Result<String, Error> {
         return Err("invalid SSH public key".into());
     }
     Ok(format!("{kind} {body}"))
+}
+
+fn normalize_gpg_public_key(key: &str) -> Result<String, Error> {
+    if key.len() > 1024 * 1024 {
+        return Err("GPG public keys must be at most 1 MiB".into());
+    }
+    let key = key.lines().map(str::trim).collect::<Vec<_>>().join("\n");
+    if !key.starts_with("-----BEGIN PGP PUBLIC KEY BLOCK-----")
+        || !key.ends_with("-----END PGP PUBLIC KEY BLOCK-----")
+    {
+        return Err("gpg_keys must contain complete armored GPG public keys".into());
+    }
+    Ok(key)
 }
 
 fn normalize_repo(path: &str) -> Result<String, Error> {
@@ -197,7 +215,71 @@ fn setup(config: &Config) -> Result<(), Error> {
     }
 
     write_authorized_keys(config)?;
+    write_signing_trust(config, &signing_root())?;
     write_cgit_config(config, &root)?;
+    Ok(())
+}
+
+fn signing_root() -> PathBuf {
+    env::var_os("AURCADE_SIGNING_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "/etc/aurcade/signing".into())
+}
+
+fn write_signing_trust(config: &Config, root: &Path) -> Result<(), Error> {
+    match fs::remove_dir_all(root) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let gnupg = root.join("gnupg");
+    fs::create_dir_all(&gnupg)?;
+    fs::set_permissions(&gnupg, fs::Permissions::from_mode(0o700))?;
+
+    let mut allowed_signers = String::new();
+    let mut gpg_keys = String::new();
+    for account in &config.accounts {
+        for key in &account.ssh_keys {
+            allowed_signers.push_str(&format!(
+                "{} namespaces=\"git\" {}\n",
+                account.name,
+                public_key(key)?
+            ));
+        }
+        for key in &account.gpg_keys {
+            gpg_keys.push_str(&normalize_gpg_public_key(key)?);
+            gpg_keys.push('\n');
+        }
+    }
+    let allowed_signers_path = root.join("allowed_signers");
+    atomic_write(&allowed_signers_path, &allowed_signers)?;
+    fs::set_permissions(allowed_signers_path, fs::Permissions::from_mode(0o644))?;
+
+    if !gpg_keys.is_empty() {
+        let mut child = Command::new("gpg")
+            .arg("--homedir")
+            .arg(&gnupg)
+            .args(["--batch", "--quiet", "--import"])
+            .stdin(Stdio::piped())
+            .spawn()?;
+        child
+            .stdin
+            .take()
+            .ok_or("failed to open gpg stdin")?
+            .write_all(gpg_keys.as_bytes())?;
+        if !child.wait()?.success() {
+            return Err("failed to import configured GPG public keys".into());
+        }
+        if !Command::new("gpgconf")
+            .arg("--homedir")
+            .arg(&gnupg)
+            .args(["--kill", "gpg-agent"])
+            .status()?
+            .success()
+        {
+            return Err("failed to stop gpg-agent after public key import".into());
+        }
+    }
     Ok(())
 }
 
@@ -559,6 +641,47 @@ mod tests {
     }
 
     #[test]
+    fn writes_signing_trust() {
+        let directory = test_directory("signing-trust");
+        let config = Config {
+            title: "Repositories".into(),
+            description: String::new(),
+            clone_prefix: "http://localhost".into(),
+            style: None,
+            logo: None,
+            accounts: vec![Account {
+                name: "alice".into(),
+                ssh_keys: vec!["ssh-ed25519 AAAA comment".into()],
+                gpg_keys: vec![],
+                paths: vec!["alice/".into()],
+            }],
+        };
+
+        write_signing_trust(&config, &directory.join("signing")).unwrap();
+        assert_eq!(
+            fs::read_to_string(directory.join("signing/allowed_signers")).unwrap(),
+            "alice namespaces=\"git\" ssh-ed25519 AAAA\n"
+        );
+        assert_eq!(
+            fs::metadata(directory.join("signing/gnupg"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert!(normalize_gpg_public_key("0xB498E2E410902F8AEC108F4F5BDC557B496BDB0D").is_err());
+        assert_eq!(
+            normalize_gpg_public_key(
+                "  -----BEGIN PGP PUBLIC KEY BLOCK-----\n\n  AAAA\n  -----END PGP PUBLIC KEY BLOCK-----  "
+            )
+            .unwrap(),
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nAAAA\n-----END PGP PUBLIC KEY BLOCK-----"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn atomic_write_does_not_follow_temporary_symlinks() {
         use std::os::unix::fs::symlink;
 
@@ -597,6 +720,7 @@ mod tests {
             accounts: vec![Account {
                 name: "alice".into(),
                 ssh_keys: vec![],
+                gpg_keys: vec![],
                 paths: vec!["external/".into()],
             }],
         };

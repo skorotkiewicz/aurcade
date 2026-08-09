@@ -1,0 +1,96 @@
+diff --git a/cgit.css b/cgit.css
+index d10a24d..c73cad7 100644
+--- a/cgit.css
++++ b/cgit.css
+@@ -439,6 +439,32 @@ div#cgit table.commit-info td {
+ 	padding: 0.1em 1em 0.1em 0.1em;
+ }
+ 
++div#cgit span.signature {
++	display: inline-block;
++	padding: 0.1em 0.4em;
++	border: solid 1px;
++	border-radius: 2px;
++	font-weight: bold;
++}
++
++div#cgit span.signature.verified {
++	color: #116329;
++	background-color: #dafbe1;
++	border-color: #4ac26b;
++}
++
++div#cgit span.signature.invalid {
++	color: #82071e;
++	background-color: #ffebe9;
++	border-color: #ff8182;
++}
++
++div#cgit span.signature.unverified {
++	color: #57606a;
++	background-color: #f6f8fa;
++	border-color: #afb8c1;
++}
++
+ div#cgit div.commit-subject {
+ 	font-weight: bold;
+ 	font-size: 125%;
+diff --git a/ui-commit.c b/ui-commit.c
+index 972e9bc..49e5036 100644
+--- a/ui-commit.c
++++ b/ui-commit.c
+@@ -9,12 +9,46 @@
+ #define USE_THE_REPOSITORY_VARIABLE
+ 
+ #include "cgit.h"
++#include "gpg-interface.h"
+ #include "ui-commit.h"
+ #include "html.h"
+ #include "ui-shared.h"
+ #include "ui-diff.h"
+ #include "ui-log.h"
+ 
++static void print_commit_signature(struct commit *commit)
++{
++	struct signature_check signature = { 0 };
++	const char *class = "unverified";
++	const char *label = "Unverified";
++
++	check_commit_signature(commit, &signature);
++	if (!signature.payload)
++		goto out;
++
++	if (signature.result == 'G') {
++		class = "verified";
++		label = "Verified";
++	} else if (signature.result == 'B') {
++		class = "invalid";
++		label = "Invalid";
++	}
++
++	html("<tr><th>signature</th><td colspan='2'>");
++	htmlf("<span class='signature %s'>%s</span>", class, label);
++	if (signature.signer) {
++		html(" ");
++		html_txt(signature.signer);
++	} else if (signature.fingerprint) {
++		html(" ");
++		html_txt(signature.fingerprint);
++	}
++	html("</td></tr>\n");
++
++out:
++	signature_check_clear(&signature);
++}
++
+ void cgit_print_commit(char *hex, const char *prefix)
+ {
+ 	struct commit *commit, *parent;
+@@ -73,6 +107,7 @@ void cgit_print_commit(char *hex, const char *prefix)
+ 	html_txt(show_date(info->committer_date, info->committer_tz,
+ 				cgit_date_mode(DATE_ISO8601)));
+ 	html("</td></tr>\n");
++	print_commit_signature(commit);
+ 	html("<tr><th>commit</th><td colspan='2' class='oid'>");
+ 	tmp = oid_to_hex(&commit->object.oid);
+ 	cgit_commit_link(tmp, NULL, NULL, ctx.qry.head, tmp, prefix);

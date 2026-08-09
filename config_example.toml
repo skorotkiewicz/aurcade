@@ -11,6 +11,8 @@ clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 name = "alice"
 # Paste complete public keys here, for example: "ssh-ed25519 AAAA... alice@host"
 ssh_keys = []
+# Optional complete armored public keys for GPG-signed commit verification.
+gpg_keys = []
 # A trailing slash grants the namespace and allows first-push creation below it.
 paths = ["example", "team/tools", "alice/"]
 
@@ -18,4 +20,9 @@ paths = ["example", "team/tools", "alice/"]
 # [[accounts]]
 # name = "bob"
 # ssh_keys = ["ssh-ed25519 REPLACE_WITH_BOBS_PUBLIC_KEY"]
+# gpg_keys = ['''
+# -----BEGIN PGP PUBLIC KEY BLOCK-----
+# ...complete armored public key...
+# -----END PGP PUBLIC KEY BLOCK-----
+# ''']
 # paths = ["team/tools"]

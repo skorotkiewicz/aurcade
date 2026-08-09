@@ -58,6 +58,7 @@ logo = "aurcade-logo.svg"
 [[accounts]]
 name = "alice"
 ssh_keys = ["ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"]
+gpg_keys = []
 paths = ["alice/"]
 ```
 

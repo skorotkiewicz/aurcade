@@ -31,6 +31,7 @@ logo = "aurcade-logo.svg"
 [[accounts]]
 name = "alice"
 ssh_keys = ["ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"]
+gpg_keys = []
 paths = ["alice/"]
 ```
 
@@ -76,6 +77,20 @@ git clone ssh://git@localhost:2222/example.git
 git remote add origin ssh://git@localhost:2222/alice/newrepo.git
 git push -u origin main
 ```
+
+## Signed commits
+
+SSH-signed commits are verified with the account's `ssh_keys`. For GPG signatures, add complete armored public keys:
+
+```toml
+gpg_keys = ['''
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+...
+-----END PGP PUBLIC KEY BLOCK-----
+''']
+```
+
+Export one with `gpg --armor --export FINGERPRINT` and restart AURcade.
 
 ## Metadata
 
