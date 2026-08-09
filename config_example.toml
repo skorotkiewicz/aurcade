@@ -13,7 +13,7 @@ name = "alice"
 ssh_keys = []
 # Optional complete armored public keys; invalid keys warn and are ignored.
 gpg_keys = []
-# Optional public-key files inside the container; relative paths use the config directory.
+# Optional public-key paths beginning with keys/, relative to this config file.
 gpg_key_files = []
 # A trailing slash grants the namespace and allows first-push creation below it.
 paths = ["example", "team/tools", "alice/"]

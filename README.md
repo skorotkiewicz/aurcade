@@ -98,7 +98,7 @@ Export one with `gpg --armor --export FINGERPRINT`. Alternatively, reference pub
 gpg_key_files = ["keys/alice.asc"]
 ```
 
-Relative paths resolve beside `config.toml`, and `~/` uses the container's `HOME`. Invalid or missing GPG keys are ignored with a startup warning. Restart AURcade after changing keys.
+Key-file paths must begin with `keys/`, relative to `config.toml`. Invalid or missing GPG keys are ignored with a startup warning. Restart AURcade after changing keys.
 
 ## Metadata
 

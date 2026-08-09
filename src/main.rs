@@ -5,7 +5,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::{self, Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -226,24 +226,18 @@ fn signing_root() -> PathBuf {
 }
 
 fn gpg_key_path(path: &str) -> Result<PathBuf, Error> {
-    let path = if path == "~" {
-        PathBuf::from(env::var_os("HOME").ok_or("cannot expand GPG key path without HOME")?)
-    } else if let Some(path) = path.strip_prefix("~/") {
-        PathBuf::from(env::var_os("HOME").ok_or("cannot expand GPG key path without HOME")?)
-            .join(path)
-    } else if path.starts_with('~') {
-        return Err("only ~/ is supported in GPG key paths".into());
-    } else {
-        PathBuf::from(path)
-    };
-    if path.is_absolute() {
-        Ok(path)
-    } else {
-        Ok(config_path()
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(path))
+    let path = Path::new(path);
+    let mut components = path.components();
+    if components.next() != Some(Component::Normal("keys".as_ref()))
+        || !matches!(components.next(), Some(Component::Normal(_)))
+        || components.any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err("GPG key files must be relative paths under keys/".into());
     }
+    Ok(config_path()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(path))
 }
 
 fn import_gpg_public_key(gnupg: &Path, account: &str, key: &str) -> Result<bool, Error> {
@@ -728,6 +722,15 @@ mod tests {
             0o700
         );
         assert!(normalize_gpg_public_key("0xB498E2E410902F8AEC108F4F5BDC557B496BDB0D").is_err());
+        assert!(gpg_key_path("keys/alice.asc").is_ok());
+        for path in [
+            "~/keys/alice.asc",
+            "/keys/alice.asc",
+            "keys/../alice.asc",
+            "keys/",
+        ] {
+            assert!(gpg_key_path(path).is_err());
+        }
         assert_eq!(
             normalize_gpg_public_key(
                 "  -----BEGIN PGP PUBLIC KEY BLOCK-----\n\n  AAAA\n  -----END PGP PUBLIC KEY BLOCK-----  "
