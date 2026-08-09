@@ -1,0 +1,16 @@
+title = "AUR repositories"
+clone_prefix = "http://localhost:8080/cgit.cgi"
+
+# Restart the container after changing accounts, keys, or paths.
+[[accounts]]
+name = "alice"
+ssh_keys = [
+  "ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY",
+]
+paths = ["example", "team/tools"]
+
+# Repeating a path grants both accounts write access.
+# [[accounts]]
+# name = "bob"
+# ssh_keys = ["ssh-ed25519 REPLACE_WITH_BOBS_PUBLIC_KEY"]
+# paths = ["team/tools"]

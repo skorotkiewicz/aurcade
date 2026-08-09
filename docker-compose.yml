@@ -1,0 +1,13 @@
+services:
+  aur-repos:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "2222:22"
+    volumes:
+      - ./config.toml:/etc/aur-repos/config.toml:ro
+      - repositories:/var/lib/aur-repos
+
+volumes:
+  repositories:
