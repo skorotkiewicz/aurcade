@@ -39,6 +39,14 @@ div#cgit {
 }
 
 div#cgit a { color: var(--accent); }
+div#cgit a.deco {
+    padding: .1rem .4rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel-hover);
+    color: var(--green);
+    font-weight: 600;
+}
 div#cgit a:hover { color: var(--accent-strong); text-decoration: none; }
 div#cgit .markdown-body a.toclink { color: var(--text) !important; }
 div#cgit .markdown-body a.toclink:hover { color: var(--accent-strong) !important; }
