@@ -4,9 +4,8 @@ clone_prefix = "http://localhost:8080/cgit.cgi"
 # Restart the container after changing accounts, keys, or paths.
 [[accounts]]
 name = "alice"
-ssh_keys = [
-  "ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY",
-]
+# Paste complete public keys here, for example: "ssh-ed25519 AAAA... alice@host"
+ssh_keys = []
 paths = ["example", "team/tools"]
 
 # Repeating a path grants both accounts write access.
