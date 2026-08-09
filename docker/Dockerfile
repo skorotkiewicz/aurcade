@@ -13,10 +13,10 @@ RUN apk add --no-cache cgit git highlight lighttpd mailcap openssh-server py3-ma
     && adduser -D -h /home/git git \
     && install -d -o git -g git /home/git/.ssh /var/lib/aurcade /etc/aurcade
 COPY --from=build /src/target/release/aurcade /usr/local/bin/aurcade
-COPY lighttpd.conf /etc/lighttpd/lighttpd.conf
-COPY cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
-COPY about-filter.py /usr/local/bin/aurcade-about-filter
-COPY entrypoint.sh /usr/local/bin/entrypoint
+COPY docker/lighttpd.conf /etc/lighttpd/lighttpd.conf
+COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
+COPY docker/about-filter.py /usr/local/bin/aurcade-about-filter
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint
 RUN passwd -d git \
     && chmod +x /usr/local/bin/aurcade-about-filter /usr/local/bin/entrypoint \
     && printf '\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers git\n' >> /etc/ssh/sshd_config

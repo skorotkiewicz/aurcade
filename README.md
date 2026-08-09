@@ -23,7 +23,7 @@ A small Git repository host for static accounts.
 3. Start the service.
 
    ```sh
-   docker compose up --build -d
+   docker compose -f docker/docker-compose.yml up --build -d
    ```
 
 4. Open <http://localhost:8080>.
@@ -47,7 +47,7 @@ paths = ["alice/"]
 Restart the service after each configuration change:
 
 ```sh
-docker compose restart
+docker compose -f docker/docker-compose.yml restart
 ```
 
 ## Repository metadata

@@ -1,0 +1,19 @@
+name: aur-repos
+
+services:
+  aurcade:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "2222:22"
+    volumes:
+      - ../config.toml:/etc/aurcade/config.toml:ro
+      - ../repositories:/var/lib/aurcade
+      - ../ssh_host_keys:/etc/ssh/host_keys
+
+# volumes:
+#   repositories:
+#   ssh_host_keys:
