@@ -36,6 +36,8 @@ RUN apk add --no-cache git gpg gpg-agent highlight lighttpd mailcap openssh-serv
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/cgit /usr/share/webapps/cgit/cgit.cgi
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/cgit.css /src/cgit-${CGIT_VERSION}/cgit.js /src/cgit-${CGIT_VERSION}/cgit.png /src/cgit-${CGIT_VERSION}/favicon.ico /src/cgit-${CGIT_VERSION}/robots.txt /usr/share/webapps/cgit/
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/syntax-highlighting.sh /usr/lib/cgit/filters/syntax-highlighting.sh
+COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/about-formatting.sh /usr/lib/cgit/filters/about-formatting.sh
+COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/html-converters/ /usr/lib/cgit/filters/html-converters/
 COPY --from=rust-build /src/target/release/aurcade /usr/local/bin/aurcade
 COPY docker/lighttpd.conf /etc/lighttpd/lighttpd.conf
 COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
