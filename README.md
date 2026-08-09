@@ -50,6 +50,16 @@ Restart the service after each configuration change:
 docker compose restart
 ```
 
+## Repository metadata
+
+Commit `.aurcade.toml` to a repository's default branch to set its cgit description:
+
+```toml
+description = "A tiny repository with an unnecessarily dramatic README"
+```
+
+Metadata is refreshed after each successful push. Repositories writable by one account appear in that account's cgit section; repositories writable by multiple accounts appear under `shared`.
+
 ## Use SSH
 
 Clone an existing repository:

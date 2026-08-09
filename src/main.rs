@@ -31,6 +31,12 @@ struct Account {
     paths: Vec<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RepositoryConfig {
+    description: String,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("aurcade: {error}");
@@ -248,6 +254,44 @@ fn cgit_style(config: &Config) -> &str {
     config.style.as_deref().unwrap_or("cgit.css")
 }
 
+fn repository_section<'a>(config: &'a Config, repository: &str) -> Option<&'a str> {
+    let mut owners = config
+        .accounts
+        .iter()
+        .filter(|account| {
+            account
+                .paths
+                .iter()
+                .any(|rule| path_matches(rule, repository))
+        })
+        .map(|account| account.name.as_str());
+    let owner = owners.next()?;
+    Some(if owners.next().is_some() {
+        "shared"
+    } else {
+        owner
+    })
+}
+
+fn repository_description(path: &Path) -> Result<Option<String>, Error> {
+    let output = Command::new("git")
+        .arg("--git-dir")
+        .arg(path)
+        .args(["show", "HEAD:.aurcade.toml"])
+        .output()?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    if output.stdout.len() > 4096 {
+        return Err(".aurcade.toml must be at most 4096 bytes".into());
+    }
+    let metadata: RepositoryConfig = toml::from_str(std::str::from_utf8(&output.stdout)?)?;
+    if metadata.description.contains(['\n', '\r']) {
+        return Err("repository description must be one line".into());
+    }
+    Ok(Some(metadata.description))
+}
+
 fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
     let path = env::var_os("AURCADE_CGIT_CONFIG")
         .or_else(|| env::var_os("CGIT_CONFIG"))
@@ -263,10 +307,17 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
     let mut repositories = BTreeSet::new();
     configured_repositories(config, root, root, &mut repositories)?;
     for repository in repositories {
+        let repository_path = root.join(format!("{repository}.git"));
+        let section = repository_section(config, &repository).expect("configured repository");
         output.push_str(&format!(
-            "\nrepo.url={repository}\nrepo.path={}/{repository}.git\n",
-            root.display()
+            "\nsection={section}\nrepo.url={repository}\nrepo.path={}\n",
+            repository_path.display()
         ));
+        match repository_description(&repository_path) {
+            Ok(Some(description)) => output.push_str(&format!("repo.desc={description}\n")),
+            Ok(None) => {}
+            Err(error) => eprintln!("aurcade: {repository}: {error}"),
+        }
     }
     atomic_write(&path, &output)
 }
@@ -360,6 +411,8 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
             return Err(error.into());
         }
         fs::remove_dir_all(&staging)?;
+    }
+    if action == "git-receive-pack" {
         write_cgit_config(config, &root)?;
     }
     Ok(())
@@ -438,6 +491,30 @@ mod tests {
             .description,
             ""
         );
+    }
+
+    #[test]
+    fn assigns_account_and_shared_sections() {
+        let config: Config = toml::from_str(
+            r#"
+                title = "Repositories"
+                clone_prefix = "http://localhost"
+                [[accounts]]
+                name = "alice"
+                ssh_keys = []
+                paths = ["alice/", "team/tools"]
+                [[accounts]]
+                name = "bob"
+                ssh_keys = []
+                paths = ["bob/", "team/tools"]
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(repository_section(&config, "alice/repo"), Some("alice"));
+        assert_eq!(repository_section(&config, "bob/repo"), Some("bob"));
+        assert_eq!(repository_section(&config, "team/tools"), Some("shared"));
+        assert_eq!(repository_section(&config, "unknown"), None);
     }
 
     fn test_directory(name: &str) -> PathBuf {
