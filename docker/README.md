@@ -59,6 +59,7 @@ logo = "aurcade-logo.svg"
 name = "alice"
 ssh_keys = ["ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"]
 gpg_keys = []
+gpg_key_files = []
 paths = ["alice/"]
 ```
 
@@ -71,6 +72,7 @@ docker run -d \
   -p 8080:80 \
   -p 2222:22 \
   -v "$PWD/config.toml:/etc/aurcade/config.toml:ro" \
+  -v "$PWD/keys:/etc/aurcade/keys:ro" \
   -v aurcade-repositories:/var/lib/aurcade \
   -v aurcade-ssh-host-keys:/etc/ssh/host_keys \
   ghcr.io/skorotkiewicz/aurcade
