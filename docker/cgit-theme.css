@@ -69,6 +69,9 @@ div#cgit span.signature.unverified {
     background: var(--panel-hover);
     color: var(--muted);
 }
+div#cgit table.commit-info tr:has(span.signature.unverified) {
+    display: none;
+}
 div#cgit .markdown-body a.toclink { color: var(--text) !important; }
 div#cgit .markdown-body a.toclink:hover { color: var(--accent-strong) !important; }
 div#cgit table#header { margin-bottom: 1.5rem; }

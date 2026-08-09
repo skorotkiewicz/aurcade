@@ -2,7 +2,7 @@ diff --git a/cgit.css b/cgit.css
 index d10a24d..c73cad7 100644
 --- a/cgit.css
 +++ b/cgit.css
-@@ -439,6 +439,32 @@ div#cgit table.commit-info td {
+@@ -439,6 +439,36 @@ div#cgit table.commit-info td {
  	padding: 0.1em 1em 0.1em 0.1em;
  }
  
@@ -30,6 +30,10 @@ index d10a24d..c73cad7 100644
 +	color: #57606a;
 +	background-color: #f6f8fa;
 +	border-color: #afb8c1;
++}
++
++div#cgit table.commit-info tr:has(span.signature.unverified) {
++	display: none;
 +}
 +
  div#cgit div.commit-subject {
