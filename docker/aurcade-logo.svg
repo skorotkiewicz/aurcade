@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">AURcade logo</title>
+  <desc id="desc">A neon arcade joystick shaped like a Git branch.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#24133d"/>
+      <stop offset="1" stop-color="#09051a"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="url(#bg)" stroke="#ff4fd8" stroke-width="6"/>
+  <path d="M37 91h54l10 18H27z" fill="#382052" stroke="#49e7ff" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M64 89V48M64 65H88V48" fill="none" stroke="#49e7ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <circle cx="64" cy="34" r="17" fill="#ffe66d" stroke="#fff2a8" stroke-width="4" filter="url(#glow)"/>
+  <circle cx="88" cy="44" r="8" fill="#7dff9b"/>
+  <circle cx="64" cy="72" r="7" fill="#ff4fd8"/>
+</svg>
