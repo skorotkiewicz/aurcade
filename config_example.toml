@@ -4,6 +4,12 @@ domain = "example.com"
 # tls_certificate = "tls/fullchain.pem"
 # tls_private_key = "tls/privkey.pem"
 description = "a fast webinterface for the git dscm"
+# Optional Markdown rendered as a block at the top of every cgit page.
+# markdown_description = """\
+# # AURcade
+#
+# A **homebrew**-style package archive for the AUR.
+# """
 clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 # Optional CSS filename; defaults to cgit.css.
 # style = "cgit-theme.css"

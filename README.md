@@ -10,7 +10,7 @@ A tiny Git host with cgit over HTTP and authenticated pushes over SSH.
   <img src="assets/screenshot.png" alt="AURcade cgit interface" width="80%">
 </p>
 
-- cgit provides the web interface and HTTP clones.
+- cgit provides the web interface and HTTP clones; an optional `markdown_description` in `config.toml` renders as a header block on every page.
 - SSH provides authenticated Git access.
 - `config.toml` defines accounts, SSH keys, and repository paths.
 
@@ -32,6 +32,16 @@ domain = "example.com"
 # tls_certificate = "tls/fullchain.pem"
 # tls_private_key = "tls/privkey.pem"
 description = "My Git repositories"
+# Optional Markdown rendered as a block at the top of every cgit page.
+# markdown_description = """\
+# # AURcade
+
+# A tiny **Git host** with cgit over HTTP and authenticated pushes over SSH.
+
+# - [SSH Lobby](ssh://git@localhost:2222) · read-only, no shell
+# - IRC **#aurcade** on port `6697` · [web client](/chat/)
+# - XMPP `alice@chat.localhost` on port `5222` · [web client](/xmpp/)
+# """
 clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 style = "cgit-theme.css"
 logo = "aurcade-logo.svg"

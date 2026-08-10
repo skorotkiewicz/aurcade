@@ -3,6 +3,7 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use pulldown_cmark::{Event, Options, Parser, html};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -30,6 +31,8 @@ struct Config {
     tls_private_key: Option<String>,
     #[serde(default)]
     description: String,
+    #[serde(default)]
+    markdown_description: Option<String>,
     clone_prefix: String,
     style: Option<String>,
     logo: Option<String>,
@@ -1020,19 +1023,62 @@ fn repository_description(path: &Path) -> Result<Option<String>, Error> {
     Ok((!description.is_empty()).then(|| description.to_owned()))
 }
 
+fn render_markdown(markdown: &str) -> String {
+    // Treat raw HTML as escaped text so config-provided Markdown can never
+    // inject markup into a page (cgit includes this block on every page).
+    let parser = Parser::new_ext(markdown, Options::empty()).map(|event| match event {
+        Event::Html(text) | Event::InlineHtml(text) => Event::Text(text),
+        event => event,
+    });
+    let mut output = String::new();
+    html::push_html(&mut output, parser);
+    output
+}
+
+fn write_cgit_header(config: &Config, root: &Path) -> Result<(), Error> {
+    let path = root.join("cgit-header.html");
+    let markdown = match config.markdown_description.as_deref() {
+        Some(markdown) if !markdown.trim().is_empty() => markdown,
+        _ => {
+            return match fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.into()),
+            };
+        }
+    };
+    if markdown.len() > 64 * 1024 {
+        return Err("markdown_description must be at most 64 KiB".into());
+    }
+    let body = render_markdown(markdown);
+    atomic_write(
+        &path,
+        &format!(
+            "<section class='aurcade-header'><div class='markdown'>\n{body}\n</div></section>\n"
+        ),
+    )
+}
+
 fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
+    write_cgit_header(config, root)?;
     let path = env::var_os("AURCADE_CGIT_CONFIG")
         .or_else(|| env::var_os("CGIT_CONFIG"))
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));
+    let header = config
+        .markdown_description
+        .as_deref()
+        .filter(|markdown| !markdown.trim().is_empty())
+        .map(|_| format!("header={}\n", root.join("cgit-header.html").display()));
     let mut output = format!(
-        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo={}\nfavicon={}\nmimetype-file=/etc/mime.types\nabout-filter=/usr/local/bin/aurcade-about-filter\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\ncache-root=/var/cache/cgit\ncache-size=1000\ncache-dynamic-ttl=1\ncache-repo-ttl=1\ncache-root-ttl=1\ncache-about-ttl=1\nreadme=:README.md\nreadme=:README\n",
+        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo={}\nfavicon={}\n{}mimetype-file=/etc/mime.types\nabout-filter=/usr/local/bin/aurcade-about-filter\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\ncache-root=/var/cache/cgit\ncache-size=1000\ncache-dynamic-ttl=1\ncache-repo-ttl=1\ncache-root-ttl=1\ncache-about-ttl=1\nreadme=:README.md\nreadme=:README\n",
         config.title,
         config.description,
         config.clone_prefix,
         format_args!("/{}", cgit_style(config)),
         format_args!("/{}", cgit_logo(config)),
-        format_args!("/{}", cgit_favicon(config))
+        format_args!("/{}", cgit_favicon(config)),
+        header.as_deref().unwrap_or("")
     );
     let mut repositories = BTreeSet::new();
     configured_repositories(config, root, root, &mut repositories)?;
@@ -1854,6 +1900,7 @@ mod tests {
             tls_certificate: None,
             tls_private_key: None,
             description: String::new(),
+            markdown_description: None,
             clone_prefix: "http://localhost".into(),
             style: None,
             logo: None,
@@ -1925,6 +1972,87 @@ mod tests {
     }
 
     #[test]
+    fn markdown_description_renders_in_cgit_header() {
+        let directory = test_directory("cgit-header");
+        let config: Config = toml::from_str(
+            r#"
+                title = "Test Cabinet"
+                description = "plain"
+                markdown_description = """\
+# Hello
+
+Features:
+
+- one
+- two
+"""
+                clone_prefix = "https://git.example"
+                [[accounts]]
+                name = "alice"
+                ssh_keys = []
+                paths = []
+            "#,
+        )
+        .unwrap();
+        write_cgit_config(&config, &directory).unwrap();
+        let cgitrc = fs::read_to_string(directory.join("cgitrc")).unwrap();
+        assert!(cgitrc.contains(&format!(
+            "header={}\n",
+            directory.join("cgit-header.html").display()
+        )));
+        let header = fs::read_to_string(directory.join("cgit-header.html")).unwrap();
+        assert!(header.contains("<section class='aurcade-header'>"));
+        assert!(header.contains("<h1>Hello</h1>"));
+        assert!(header.contains("<li>one</li>"));
+        assert!(!header.contains("# Hello"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn markdown_header_escapes_raw_html() {
+        let directory = test_directory("cgit-header-html");
+        let config: Config = toml::from_str(
+            r#"
+                title = "Test Cabinet"
+                markdown_description = "before <script>alert(1)</script> *safe*"
+                clone_prefix = "https://git.example"
+                [[accounts]]
+                name = "alice"
+                ssh_keys = []
+                paths = []
+            "#,
+        )
+        .unwrap();
+        write_cgit_config(&config, &directory).unwrap();
+        let header = fs::read_to_string(directory.join("cgit-header.html")).unwrap();
+        assert!(header.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!header.contains("<script>"));
+        assert!(header.contains("<em>safe</em>"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn cgit_header_omitted_without_markdown_description() {
+        let directory = test_directory("cgit-header-empty");
+        let config: Config = toml::from_str(
+            r#"
+                title = "Test Cabinet"
+                clone_prefix = "https://git.example"
+                [[accounts]]
+                name = "alice"
+                ssh_keys = []
+                paths = []
+            "#,
+        )
+        .unwrap();
+        write_cgit_config(&config, &directory).unwrap();
+        let cgitrc = fs::read_to_string(directory.join("cgitrc")).unwrap();
+        assert!(!cgitrc.contains("header="));
+        assert!(!directory.join("cgit-header.html").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn repository_scan_ignores_symlinked_directories() {
         use std::os::unix::fs::symlink;
 
@@ -1940,6 +2068,7 @@ mod tests {
             tls_certificate: None,
             tls_private_key: None,
             description: String::new(),
+            markdown_description: None,
             clone_prefix: "http://localhost".into(),
             style: None,
             logo: None,
