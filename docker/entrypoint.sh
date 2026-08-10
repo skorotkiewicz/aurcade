@@ -4,6 +4,10 @@ set -eu
 : "${AURCADE_ROOT:=/var/lib/aurcade}"
 export AURCADE_ROOT
 
+if [ "$#" -gt 0 ]; then
+    exec aurcade "$@"
+fi
+
 aurcade setup
 install -d -m 700 -o lighttpd -g lighttpd /var/cache/cgit
 find /var/cache/cgit -mindepth 1 -delete

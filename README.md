@@ -41,6 +41,15 @@ gpg_key_files = []
 paths = ["alice/"]
 ```
 
+Generate a ready-to-paste account block or only an Argon2id password hash:
+
+```sh
+docker compose run --rm --no-deps aurcade account-template alice
+docker compose run --rm --no-deps aurcade hash-password
+```
+
+These commands print TOML without modifying `config.toml`.
+
 ```sh
 docker run -d \
   --name aurcade \

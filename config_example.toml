@@ -11,6 +11,9 @@ clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 # Restart the container after changing accounts, keys, or paths.
 [[accounts]]
 name = "alice"
+# Optional Argon2id hash for services that use password authentication.
+# Generate one with: docker compose run --rm --no-deps aurcade hash-password
+# password_hash = "$argon2id$..."
 # Paste complete public keys here, for example: "ssh-ed25519 AAAA... alice@host"
 ssh_keys = []
 # Optional complete armored public keys; invalid keys warn and are ignored.

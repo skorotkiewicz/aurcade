@@ -1,9 +1,13 @@
+use argon2::{
+    Argon2,
+    password_hash::{PasswordHash, PasswordHasher, SaltString},
+};
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     env,
     fs::{self, OpenOptions},
-    io::{self, Write},
+    io::{self, Read, Write},
     os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
     process::{self, Command, Stdio},
@@ -29,6 +33,8 @@ struct Config {
 #[serde(deny_unknown_fields)]
 struct Account {
     name: String,
+    #[serde(default)]
+    password_hash: Option<String>,
     ssh_keys: Vec<String>,
     #[serde(default)]
     gpg_keys: Vec<String>,
@@ -45,17 +51,93 @@ fn main() {
 }
 
 fn run() -> Result<(), Error> {
+    let mut args = env::args().skip(1);
+    let command = args.next();
+    match command.as_deref() {
+        Some("hash-password") => {
+            if args.next().is_some() {
+                return Err("usage: aurcade hash-password".into());
+            }
+            println!("{}", hash_password(&prompt_password()?)?);
+            return Ok(());
+        }
+        Some("account-template") => {
+            let name = args.next().ok_or("usage: aurcade account-template NAME")?;
+            if args.next().is_some() {
+                return Err("usage: aurcade account-template NAME".into());
+            }
+            eprint!("SSH public key: ");
+            io::stderr().flush()?;
+            let mut key = String::new();
+            io::stdin().read_line(&mut key)?;
+            let key = key.trim_end_matches(['\r', '\n']);
+            let hash = hash_password(&prompt_password()?)?;
+            println!("{}", account_template(&name, key, &hash)?);
+            return Ok(());
+        }
+        _ => {}
+    }
+
     let config = load_config()?;
     validate_config(&config)?;
-
-    match env::args().nth(1).as_deref() {
-        Some("setup") => setup(&config),
-        Some("serve") => serve(
-            &config,
-            env::args().nth(2).as_deref().ok_or("missing account")?,
+    match command.as_deref() {
+        Some("setup") if args.next().is_none() => setup(&config),
+        Some("serve") => {
+            let account = args.next().ok_or("missing account")?;
+            if args.next().is_some() {
+                return Err("usage: aurcade serve ACCOUNT".into());
+            }
+            serve(&config, &account)
+        }
+        _ => Err(
+            "usage: aurcade setup | serve ACCOUNT | hash-password | account-template NAME".into(),
         ),
-        _ => Err("usage: aurcade setup | serve ACCOUNT".into()),
     }
+}
+
+fn prompt_password() -> Result<String, Error> {
+    let password = rpassword::prompt_password("Password: ")?;
+    if password.is_empty() {
+        return Err("password cannot be empty".into());
+    }
+    if password != rpassword::prompt_password("Confirm password: ")? {
+        return Err("passwords do not match".into());
+    }
+    Ok(password)
+}
+
+fn hash_password(password: &str) -> Result<String, Error> {
+    let mut salt = [0; 16];
+    fs::File::open("/dev/urandom")?.read_exact(&mut salt)?;
+    let salt = SaltString::encode_b64(&salt)?;
+    Ok(Argon2::default()
+        .hash_password(password.as_bytes(), &salt)?
+        .to_string())
+}
+
+fn validate_password_hash(hash: &str) -> Result<(), Error> {
+    if !hash.starts_with("$argon2id$") || PasswordHash::new(hash).is_err() {
+        return Err("password_hash must be a valid Argon2id PHC string".into());
+    }
+    Ok(())
+}
+
+fn valid_account_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+fn account_template(name: &str, key: &str, password_hash: &str) -> Result<String, Error> {
+    if !valid_account_name(name) {
+        return Err(format!("invalid account name: {name}").into());
+    }
+    let key = public_key(key)?;
+    validate_password_hash(password_hash)?;
+    Ok(format!(
+        "[[accounts]]\nname = \"{name}\"\npassword_hash = \"{password_hash}\"\nssh_keys = [\"{key}\"]\ngpg_keys = []\ngpg_key_files = []\npaths = [\"{name}/\"]"
+    ))
 }
 
 fn config_path() -> PathBuf {
@@ -114,13 +196,11 @@ fn validate_config(config: &Config) -> Result<(), Error> {
 
     let mut names = HashSet::new();
     for account in &config.accounts {
-        if account.name.is_empty()
-            || !account
-                .name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-        {
+        if !valid_account_name(&account.name) {
             return Err(format!("invalid account name: {}", account.name).into());
+        }
+        if let Some(hash) = &account.password_hash {
+            validate_password_hash(hash)?;
         }
         if !names.insert(&account.name) {
             return Err(format!("duplicate account: {}", account.name).into());
@@ -1086,6 +1166,7 @@ fn parse_git_command(command: &str) -> Result<(&str, String), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use argon2::PasswordVerifier;
 
     #[test]
     fn accepts_git_commands_and_rejects_escapes() {
@@ -1105,6 +1186,32 @@ mod tests {
         assert_eq!(parse_delete_command("uname -a").unwrap(), None);
         assert!(normalize_repo(".aurcade-trash/repository").is_err());
         assert!(normalize_repo(".aurcade-activity/alice").is_err());
+    }
+
+    #[test]
+    fn hashes_passwords_and_renders_account_templates() {
+        let hash = hash_password("correct horse battery staple").unwrap();
+        let parsed = PasswordHash::new(&hash).unwrap();
+        assert!(
+            Argon2::default()
+                .verify_password(b"correct horse battery staple", &parsed)
+                .is_ok()
+        );
+        assert!(
+            Argon2::default()
+                .verify_password(b"wrong", &parsed)
+                .is_err()
+        );
+        assert!(validate_password_hash("$argon2i$invalid").is_err());
+
+        let account = account_template("alice", "ssh-ed25519 AAAA alice@host", &hash).unwrap();
+        assert!(account.contains(&format!("password_hash = \"{hash}\"")));
+        assert!(account.contains("paths = [\"alice/\"]"));
+        let config: Config = toml::from_str(&format!(
+            "title = \"Test\"\nclone_prefix = \"https://git.example\"\n{account}"
+        ))
+        .unwrap();
+        validate_config(&config).unwrap();
     }
 
     #[test]
@@ -1264,6 +1371,7 @@ mod tests {
             favicon: None,
             accounts: vec![Account {
                 name: "alice".into(),
+                password_hash: None,
                 ssh_keys: vec!["ssh-ed25519 AAAA comment".into()],
                 gpg_keys: vec!["0xB498E2E410902F8AEC108F4F5BDC557B496BDB0D".into()],
                 gpg_key_files: vec![
@@ -1346,6 +1454,7 @@ mod tests {
             favicon: None,
             accounts: vec![Account {
                 name: "alice".into(),
+                password_hash: None,
                 ssh_keys: vec![],
                 gpg_keys: vec![],
                 gpg_key_files: vec![],
