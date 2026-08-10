@@ -20,6 +20,13 @@ RUN cd "cgit-${CGIT_VERSION}" \
     && make -j"$(nproc)" NO_LUA=1 NO_ICONV=YesPlease NO_GETTEXT=YesPlease \
         NO_TCLTK=YesPlease NO_SVN_TESTS=YesPlease NO_REGEX=NeedsStartEnd
 
+FROM node:24-alpine AS gamja-build
+WORKDIR /src
+COPY resources/gamja/package.json resources/gamja/package-lock.json ./
+RUN npm ci
+COPY resources/gamja ./
+RUN npm run build
+
 FROM rust:1.85-alpine AS rust-build
 WORKDIR /src
 RUN apk add --no-cache musl-dev
@@ -30,7 +37,7 @@ RUN cargo build --locked --release
 FROM alpine:3.21
 ARG CGIT_VERSION
 ENV CGIT_CONFIG=/var/lib/aurcade/cgitrc
-RUN apk add --no-cache git gpg gpg-agent gpgv highlight lighttpd mailcap openssh-server py3-markdown py3-pygments \
+RUN apk add --no-cache git gpg gpg-agent gpgv highlight lighttpd mailcap openssh-server openssl py3-markdown py3-pygments \
     && adduser -D -h /home/git git \
     && install -d -o git -g git /home/git/.ssh /var/lib/aurcade /etc/aurcade
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/cgit /usr/share/webapps/cgit/cgit.cgi
@@ -39,6 +46,7 @@ COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/syntax-highlighting.sh 
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/about-formatting.sh /usr/lib/cgit/filters/about-formatting.sh
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/html-converters/ /usr/lib/cgit/filters/html-converters/
 COPY --from=rust-build /src/target/release/aurcade /usr/local/bin/aurcade
+COPY --from=gamja-build /src/dist/ /usr/share/webapps/gamja/
 COPY docker/lighttpd.conf /etc/lighttpd/lighttpd.conf
 COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
 COPY docker/aurcade-logo.svg /usr/share/webapps/cgit/aurcade-logo.svg

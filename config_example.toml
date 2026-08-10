@@ -1,4 +1,8 @@
 title = "AURcade"
+domain = "example.com"
+# Optional; omit both to generate persistent self-signed TLS files.
+# tls_certificate = "tls/fullchain.pem"
+# tls_private_key = "tls/privkey.pem"
 description = "a fast webinterface for the git dscm"
 clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 # Optional CSS filename; defaults to cgit.css.

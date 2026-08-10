@@ -1,13 +1,14 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     env,
     fs::{self, OpenOptions},
-    io::{self, Write},
+    io::{self, BufRead, BufReader, Read, Write},
+    net::{TcpListener, TcpStream},
     os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
     process::{self, Command, Stdio},
@@ -20,6 +21,12 @@ type Error = Box<dyn std::error::Error>;
 #[serde(deny_unknown_fields)]
 struct Config {
     title: String,
+    #[serde(default)]
+    domain: Option<String>,
+    #[serde(default)]
+    tls_certificate: Option<String>,
+    #[serde(default)]
+    tls_private_key: Option<String>,
     #[serde(default)]
     description: String,
     clone_prefix: String,
@@ -41,6 +48,40 @@ struct Account {
     #[serde(default)]
     gpg_key_files: Vec<String>,
     paths: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IrcConfig {
+    #[serde(default = "default_irc_network")]
+    network: String,
+    #[serde(default)]
+    autojoin: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct XmppConfig {
+    #[serde(default)]
+    admins: Vec<String>,
+}
+
+fn default_irc_network() -> String {
+    "AURcade".into()
+}
+
+#[derive(Deserialize)]
+struct ErgoAuthRequest {
+    #[serde(rename = "accountName")]
+    account_name: String,
+    passphrase: String,
+}
+
+#[derive(Serialize)]
+struct ErgoAuthResponse<'a> {
+    success: bool,
+    #[serde(rename = "accountName", skip_serializing_if = "Option::is_none")]
+    account_name: Option<&'a str>,
 }
 
 fn main() {
@@ -82,6 +123,9 @@ fn run() -> Result<(), Error> {
     validate_config(&config)?;
     match command.as_deref() {
         Some("setup") if args.next().is_none() => setup(&config),
+        Some("auth-ergo") if args.next().is_none() => authenticate_ergo(&config),
+        Some("auth-server") if args.next().is_none() => auth_server(&config),
+        Some("generate-services") if args.next().is_none() => generate_services(&config),
         Some("serve") => {
             let account = args.next().ok_or("missing account")?;
             if args.next().is_some() {
@@ -90,7 +134,7 @@ fn run() -> Result<(), Error> {
             serve(&config, &account)
         }
         _ => Err(
-            "usage: aurcade setup | serve ACCOUNT | hash-password | account-template NAME".into(),
+            "usage: aurcade setup | serve ACCOUNT | hash-password | account-template NAME | auth-ergo | auth-server | generate-services".into(),
         ),
     }
 }
@@ -111,6 +155,132 @@ fn hash_password(password: &str) -> Result<String, Error> {
     Ok(Argon2::default()
         .hash_password(password.as_bytes(), &salt)?
         .to_string())
+}
+
+fn verify_password(account: Option<&Account>, password: &str, dummy_hash: &str) -> bool {
+    let hash = account
+        .and_then(|account| account.password_hash.as_deref())
+        .unwrap_or(dummy_hash);
+    PasswordHash::new(hash).is_ok_and(|hash| {
+        Argon2::default()
+            .verify_password(password.as_bytes(), &hash)
+            .is_ok()
+            && account.is_some_and(|account| account.password_hash.is_some())
+    })
+}
+
+fn authenticate_ergo(config: &Config) -> Result<(), Error> {
+    let mut request = String::new();
+    io::stdin().read_line(&mut request)?;
+    if request.len() > 16 * 1024 {
+        return Err("Ergo authentication request is too large".into());
+    }
+    let request: ErgoAuthRequest = serde_json::from_str(&request)?;
+    let dummy_hash = hash_password("aurcade unknown account")?;
+    let account = config
+        .accounts
+        .iter()
+        .find(|account| account.name == request.account_name);
+    let success = verify_password(account, &request.passphrase, &dummy_hash);
+    serde_json::to_writer(
+        io::stdout(),
+        &ErgoAuthResponse {
+            success,
+            account_name: success.then_some(&request.account_name),
+        },
+    )?;
+    println!();
+    Ok(())
+}
+
+fn auth_response(stream: &mut TcpStream, status: &str) -> io::Result<()> {
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    )
+}
+
+fn handle_auth_connection(
+    config: &Config,
+    dummy_hash: &str,
+    stream: &mut TcpStream,
+) -> Result<(), Error> {
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let mut request = String::new();
+    reader.read_line(&mut request)?;
+    let mut request = request.split_ascii_whitespace();
+    let method = request.next();
+    let path = request.next();
+    if method != Some("POST") || !matches!(path, Some("/verify" | "/exists")) {
+        auth_response(stream, "404 Not Found")?;
+        return Ok(());
+    }
+
+    let mut account_name = None;
+    let mut content_length = 0;
+    let mut header_bytes = 0;
+    loop {
+        let mut header = String::new();
+        reader.read_line(&mut header)?;
+        header_bytes += header.len();
+        if header_bytes > 16 * 1024 {
+            auth_response(stream, "400 Bad Request")?;
+            return Ok(());
+        }
+        if header == "\r\n" || header == "\n" {
+            break;
+        }
+        if let Some((name, value)) = header.split_once(':') {
+            match name.to_ascii_lowercase().as_str() {
+                "x-aurcade-account" => account_name = Some(value.trim().to_owned()),
+                "content-length" => content_length = value.trim().parse().unwrap_or(usize::MAX),
+                _ => {}
+            }
+        }
+    }
+    if content_length > 4096 {
+        auth_response(stream, "400 Bad Request")?;
+        return Ok(());
+    }
+    let Some(account_name) = account_name.filter(|name| valid_account_name(name)) else {
+        auth_response(stream, "400 Bad Request")?;
+        return Ok(());
+    };
+    let account = config
+        .accounts
+        .iter()
+        .find(|account| account.name == account_name);
+    let success = if path == Some("/exists") {
+        account.is_some_and(|account| account.password_hash.is_some())
+    } else {
+        let mut password = vec![0; content_length];
+        reader.read_exact(&mut password)?;
+        String::from_utf8(password)
+            .ok()
+            .is_some_and(|password| verify_password(account, &password, dummy_hash))
+    };
+    auth_response(
+        stream,
+        if success {
+            "204 No Content"
+        } else {
+            "401 Unauthorized"
+        },
+    )?;
+    Ok(())
+}
+
+fn auth_server(config: &Config) -> Result<(), Error> {
+    let listener = TcpListener::bind("0.0.0.0:9000")?;
+    let dummy_hash = hash_password("aurcade unknown account")?;
+    // ponytail: sequential auth is enough for a personal server; thread it if login load grows.
+    for stream in listener.incoming() {
+        let mut stream = stream?;
+        if let Err(error) = handle_auth_connection(config, &dummy_hash, &mut stream) {
+            eprintln!("aurcade: authentication request failed: {error}");
+        }
+    }
+    Ok(())
 }
 
 fn validate_password_hash(hash: &str) -> Result<(), Error> {
@@ -138,6 +308,12 @@ fn account_template(name: &str, key: &str, password_hash: &str) -> Result<String
     ))
 }
 
+fn service_root() -> PathBuf {
+    env::var_os("AURCADE_SERVICE_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "/etc/aurcade/services".into())
+}
+
 fn config_path() -> PathBuf {
     env::var_os("AURCADE_CONFIG")
         .map(PathBuf::from)
@@ -156,7 +332,51 @@ fn load_config() -> Result<Config, Error> {
         .map_err(|error| format!("{}: {error}", path.display()).into())
 }
 
+fn valid_domain(domain: &str) -> bool {
+    !domain.is_empty()
+        && domain.len() <= 253
+        && domain.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        })
+}
+
+fn tls_path(filename: &str) -> Result<PathBuf, Error> {
+    let path = Path::new(filename);
+    let mut components = path.components();
+    if components.next() != Some(Component::Normal("tls".as_ref()))
+        || !components.all(|component| matches!(component, Component::Normal(_)))
+    {
+        return Err(
+            format!("TLS paths must be relative paths beginning with tls/: {filename}").into(),
+        );
+    }
+    Ok(config_path()
+        .parent()
+        .ok_or("config path has no parent")?
+        .join(path))
+}
+
 fn validate_config(config: &Config) -> Result<(), Error> {
+    if let Some(domain) = &config.domain
+        && !valid_domain(domain)
+    {
+        return Err(format!("invalid domain: {domain}").into());
+    }
+    if config.tls_certificate.is_some() != config.tls_private_key.is_some() {
+        return Err("tls_certificate and tls_private_key must be configured together".into());
+    }
+    if let Some(filename) = &config.tls_certificate {
+        tls_path(filename)?;
+    }
+    if let Some(filename) = &config.tls_private_key {
+        tls_path(filename)?;
+    }
     if config.title.contains(['\n', '\r'])
         || config.description.contains(['\n', '\r'])
         || config.clone_prefix.contains(['\n', '\r'])
@@ -273,6 +493,142 @@ fn path_matches(rule: &str, repository: &str) -> bool {
     } else {
         repository == path
     }
+}
+
+fn load_service_config<T: for<'de> Deserialize<'de>>(
+    variable: &str,
+    default: &str,
+) -> Result<T, Error> {
+    let path = env::var_os(variable)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| default.into());
+    toml::from_str(&fs::read_to_string(&path)?)
+        .map_err(|error| format!("{}: {error}", path.display()).into())
+}
+
+fn regular_file(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_file())
+}
+
+fn ensure_tls(config: &Config, domain: &str) -> Result<(PathBuf, PathBuf), Error> {
+    let (certificate, private_key, supplied) = match (
+        config.tls_certificate.as_deref(),
+        config.tls_private_key.as_deref(),
+    ) {
+        (Some(certificate), Some(private_key)) => {
+            (tls_path(certificate)?, tls_path(private_key)?, true)
+        }
+        (None, None) => (
+            tls_path("tls/fullchain.pem")?,
+            tls_path("tls/privkey.pem")?,
+            false,
+        ),
+        _ => unreachable!("validated TLS configuration"),
+    };
+    if regular_file(&certificate) && regular_file(&private_key) {
+        return Ok((certificate, private_key));
+    }
+    if supplied || certificate.exists() || private_key.exists() {
+        return Err("TLS certificate and private key must both be regular files".into());
+    }
+
+    fs::create_dir_all(certificate.parent().ok_or("TLS path has no parent")?)?;
+    let temporary_certificate = certificate.with_extension(format!("crt.{}", process::id()));
+    let temporary_key = private_key.with_extension(format!("key.{}", process::id()));
+    let status = Command::new("openssl")
+        .args([
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:3072",
+            "-sha256",
+            "-nodes",
+            "-days",
+            "365",
+            "-subj",
+            &format!("/CN={domain}"),
+            "-addext",
+            &format!("subjectAltName=DNS:{domain}"),
+            "-keyout",
+        ])
+        .arg(&temporary_key)
+        .arg("-out")
+        .arg(&temporary_certificate)
+        .status()?;
+    if !status.success() {
+        return Err("failed to generate self-signed TLS certificate".into());
+    }
+    fs::set_permissions(&temporary_key, fs::Permissions::from_mode(0o600))?;
+    fs::set_permissions(&temporary_certificate, fs::Permissions::from_mode(0o644))?;
+    fs::rename(temporary_key, &private_key)?;
+    fs::rename(temporary_certificate, &certificate)?;
+    Ok((certificate, private_key))
+}
+
+fn generate_services(config: &Config) -> Result<(), Error> {
+    let domain = config
+        .domain
+        .as_deref()
+        .ok_or("domain is required for IRC and XMPP")?;
+    let irc: IrcConfig = load_service_config("AURCADE_IRC_CONFIG", "/etc/aurcade/irc.toml")?;
+    let xmpp: XmppConfig = load_service_config("AURCADE_XMPP_CONFIG", "/etc/aurcade/xmpp.toml")?;
+    if irc.network.is_empty()
+        || irc.network.len() > 64
+        || irc.network.contains(['\n', '\r'])
+        || irc.autojoin.iter().any(|channel| {
+            !channel.starts_with('#')
+                || channel.len() < 2
+                || channel.contains([' ', ',', '\n', '\r'])
+        })
+    {
+        return Err("invalid IRC network or autojoin channel".into());
+    }
+    for admin in &xmpp.admins {
+        if !config.accounts.iter().any(|account| &account.name == admin) {
+            return Err(format!("unknown XMPP admin account: {admin}").into());
+        }
+    }
+
+    let (certificate, private_key) = ensure_tls(config, domain)?;
+    let certificate = certificate
+        .to_str()
+        .ok_or("TLS certificate path is not UTF-8")?;
+    let private_key = private_key
+        .to_str()
+        .ok_or("TLS private key path is not UTF-8")?;
+    let network = serde_json::to_string(&irc.network)?;
+    let origin = serde_json::to_string(&format!("http://{domain}:8080"))?;
+    let secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
+    let ergo = format!(
+        "network:\n  name: {network}\nserver:\n  name: {domain}\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\n"
+    );
+
+    let gamja = serde_json::to_vec_pretty(&serde_json::json!({
+        "server": {
+            "url": "/webirc",
+            "autojoin": irc.autojoin,
+            "auth": "mandatory",
+            "ping": 60
+        }
+    }))?;
+    let admins = xmpp
+        .admins
+        .iter()
+        .map(|admin| format!("\"{admin}@{domain}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let prosody = format!(
+        "daemonize = false\nprosody_user = \"prosody\"\nprosody_group = \"prosody\"\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\nplugin_paths = {{ \"/usr/lib/prosody/custom_plugins\" }}\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"{certificate}\"; key = \"{private_key}\"; }}\nlog = {{ \"*console\"; }}\nVirtualHost \"{domain}\"\n"
+    );
+
+    let root = service_root();
+    fs::create_dir_all(&root)?;
+    atomic_write(&root.join("ircd.yaml"), &ergo)?;
+    atomic_write_bytes(&root.join("gamja-config.json"), &gamja)?;
+    atomic_write(&root.join("prosody.cfg.lua"), &prosody)?;
+    atomic_write_bytes(&root.join("aurcade"), &fs::read("/proc/self/exe")?)?;
+    fs::set_permissions(root.join("aurcade"), fs::Permissions::from_mode(0o755))?;
+    Ok(())
 }
 
 fn init_repository(root: &Path, repository: &str) -> Result<(), Error> {
@@ -587,6 +943,10 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
 }
 
 fn atomic_write(path: &Path, contents: &str) -> Result<(), Error> {
+    atomic_write_bytes(path, contents.as_bytes())
+}
+
+fn atomic_write_bytes(path: &Path, contents: &[u8]) -> Result<(), Error> {
     fs::create_dir_all(path.parent().ok_or("output path has no parent")?)?;
     let temporary = path.with_extension(format!("tmp.{}", process::id()));
     match fs::remove_file(&temporary) {
@@ -598,7 +958,7 @@ fn atomic_write(path: &Path, contents: &str) -> Result<(), Error> {
         .write(true)
         .create_new(true)
         .open(&temporary)?;
-    file.write_all(contents.as_bytes())?;
+    file.write_all(contents)?;
     fs::rename(temporary, path)?;
     Ok(())
 }
@@ -1164,7 +1524,6 @@ fn parse_git_command(command: &str) -> Result<(&str, String), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use argon2::PasswordVerifier;
 
     #[test]
     fn accepts_git_commands_and_rejects_escapes() {
@@ -1362,6 +1721,9 @@ mod tests {
         let directory = test_directory("signing-trust");
         let config = Config {
             title: "Repositories".into(),
+            domain: None,
+            tls_certificate: None,
+            tls_private_key: None,
             description: String::new(),
             clone_prefix: "http://localhost".into(),
             style: None,
@@ -1445,6 +1807,9 @@ mod tests {
         symlink(&external, root.join("external")).unwrap();
         let config = Config {
             title: "Repositories".into(),
+            domain: None,
+            tls_certificate: None,
+            tls_private_key: None,
             description: String::new(),
             clone_prefix: "http://localhost".into(),
             style: None,

@@ -3,5 +3,6 @@
 /keys
 /repositories
 /ssh_host_keys
+/tls
 config.toml
 __pycache__
