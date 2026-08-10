@@ -723,6 +723,19 @@ fn invalidate_activity_caches(config: &Config, root: &Path, repository: &str) ->
     Ok(())
 }
 
+fn repository_commit_count(repository: &Path) -> Option<u64> {
+    let output = Command::new("git")
+        .arg("--git-dir")
+        .arg(repository)
+        .args(["rev-list", "--count", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return Some(0);
+    }
+    String::from_utf8(output.stdout).ok()?.trim().parse().ok()
+}
+
 fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, Error> {
     let repositories = account_repositories(config, account, root)?;
 
@@ -743,9 +756,13 @@ fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, 
     }
     for (index, repository) in repositories.iter().enumerate() {
         let state = if repository_section(config, repository) == Some("shared") {
-            "CO-OP"
+            "CO-OP".to_owned()
         } else {
-            "READY"
+            match repository_commit_count(&root.join(format!("{repository}.git"))) {
+                Some(1) => "1 COMMIT".to_owned(),
+                Some(commits) => format!("{commits} COMMITS"),
+                None => "? COMMITS".to_owned(),
+            }
         };
         output.push_str(&format!("{:02}  {repository}  [{state}]\n", index + 1));
         for prefix in config.clone_prefix.split_whitespace() {
@@ -1171,7 +1188,7 @@ mod tests {
 
         let output = ssh_lobby(&config, &config.accounts[0], &root).unwrap();
         assert!(output.contains("PLAYER 1: alice  [KEY ACCEPTED]"));
-        assert!(output.contains("01  alice/game  [READY]"));
+        assert!(output.contains("01  alice/game  [0 COMMITS]"));
         assert!(output.contains("02  team/tools  [CO-OP]"));
         assert!(output.contains("https://git.example/alice/game"));
         assert!(output.contains("ssh://git@git.example/team/tools"));
@@ -1429,6 +1446,7 @@ mod tests {
         git(&["push", "--quiet", "origin", "main"]);
 
         let victory = push_victory(&repository, &before).unwrap();
+        assert_eq!(repository_commit_count(&repository), Some(2));
         assert_eq!(victory.commits, 2);
         assert_eq!(victory.verified, 0);
         assert_eq!(victory.branches, ["main"]);
