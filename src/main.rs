@@ -1,13 +1,13 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, SaltString},
+    password_hash::{PasswordHash, PasswordHasher, SaltString, rand_core::OsRng},
 };
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     env,
     fs::{self, OpenOptions},
-    io::{self, Read, Write},
+    io::{self, Write},
     os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
     process::{self, Command, Stdio},
@@ -107,9 +107,7 @@ fn prompt_password() -> Result<String, Error> {
 }
 
 fn hash_password(password: &str) -> Result<String, Error> {
-    let mut salt = [0; 16];
-    fs::File::open("/dev/urandom")?.read_exact(&mut salt)?;
-    let salt = SaltString::encode_b64(&salt)?;
+    let salt = SaltString::generate(&mut OsRng);
     Ok(Argon2::default()
         .hash_password(password.as_bytes(), &salt)?
         .to_string())
