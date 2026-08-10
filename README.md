@@ -67,7 +67,7 @@ Build locally instead:
 docker compose up --build -d
 ```
 
-Open <http://localhost:8080>. Compose routes HTTP through Anubis while SSH remains direct; `docker/botPolicy.yaml` imports Anubis's maintained default policy. After AURcade configuration changes, run `docker restart aurcade`.
+Open <http://localhost:8080>. Compose routes HTTP through Anubis while SSH remains direct; `botPolicy.yaml` imports Anubis's maintained default policy. After AURcade configuration changes, run `docker restart aurcade`.
 
 ## Access
 
