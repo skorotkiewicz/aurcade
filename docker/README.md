@@ -1,7 +1,7 @@
 # AURcade
 
 <p align="center">
-  <img src="assets/aurcade-banner.svg" alt="AURcade retro arcade cabinet — insert SSH key to continue" width="100%">
+  <img src="../assets/aurcade-banner.svg" alt="AURcade retro arcade cabinet — insert SSH key to continue" width="100%">
 </p>
 
 A small Git repository host for static accounts.
