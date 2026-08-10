@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     env,
     fs::{self, OpenOptions},
     io::{self, Write},
@@ -741,6 +741,120 @@ fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, 
     Ok(output)
 }
 
+struct PushVictory {
+    commits: usize,
+    verified: usize,
+    branches: Vec<String>,
+}
+
+fn branch_refs(repository: &Path) -> Result<BTreeMap<String, String>, Error> {
+    let output = Command::new("git")
+        .arg("--git-dir")
+        .arg(repository)
+        .args([
+            "for-each-ref",
+            "--format=%(refname:strip=2)%09%(objectname)",
+            "refs/heads",
+        ])
+        .output()?;
+    if !output.status.success() {
+        return Err("failed to read branch refs".into());
+    }
+    Ok(String::from_utf8(output.stdout)?
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .map(|(branch, commit)| (branch.to_owned(), commit.to_owned()))
+        .collect())
+}
+
+fn push_victory(
+    repository: &Path,
+    before: &BTreeMap<String, String>,
+) -> Result<PushVictory, Error> {
+    let after = branch_refs(repository)?;
+    let branches: Vec<String> = before
+        .keys()
+        .chain(after.keys())
+        .filter(|branch| before.get(*branch) != after.get(*branch))
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let new_tips: Vec<&str> = after
+        .iter()
+        .filter(|(branch, commit)| before.get(*branch) != Some(*commit))
+        .map(|(_, commit)| commit.as_str())
+        .collect();
+    if new_tips.is_empty() {
+        return Ok(PushVictory {
+            commits: 0,
+            verified: 0,
+            branches,
+        });
+    }
+
+    let mut command = Command::new("git");
+    command
+        .arg("-c")
+        .arg(format!(
+            "gpg.ssh.allowedSignersFile={}",
+            signing_root().join("allowed_signers").display()
+        ))
+        .arg("-c")
+        .arg("gpg.openpgp.program=/usr/bin/gpg")
+        .env("GNUPGHOME", signing_root().join("gnupg"))
+        .arg("--git-dir")
+        .arg(repository)
+        .args(["log", "--format=%H%x09%G?%x09%GS"])
+        .args(new_tips);
+    if !before.is_empty() {
+        command.arg("--not").args(before.values());
+    }
+    let output = command.stderr(Stdio::null()).output()?;
+    if !output.status.success() {
+        return Err("failed to inspect pushed commits".into());
+    }
+    let mut commits = 0;
+    let mut verified = 0;
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        commits += 1;
+        let mut fields = line.split('\t');
+        if matches!(
+            (fields.next(), fields.next(), fields.next(), fields.next()),
+            (Some(_), Some("G"), Some(signer), None) if !signer.is_empty()
+        ) {
+            verified += 1;
+        }
+    }
+    Ok(PushVictory {
+        commits,
+        verified,
+        branches,
+    })
+}
+
+fn print_push_victory(victory: &PushVictory) {
+    let commits = if victory.commits == 1 {
+        "commit"
+    } else {
+        "commits"
+    };
+    let signatures = if victory.verified == 1 {
+        "signature"
+    } else {
+        "signatures"
+    };
+    let update = if victory.branches.is_empty() {
+        "refs unchanged".to_owned()
+    } else {
+        format!("{} updated", victory.branches.join(", "))
+    };
+    eprintln!(
+        "\nNEW HIGH SCORE!\n{} {commits} · {} verified {signatures} · {update}",
+        victory.commits, victory.verified
+    );
+}
+
 fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     let account = config
         .accounts
@@ -800,6 +914,11 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     } else {
         None
     };
+    let refs_before = if action == "git-receive-pack" {
+        branch_refs(&path).ok()
+    } else {
+        None
+    };
 
     let status = match Command::new(action).arg(&path).status() {
         Ok(status) => status,
@@ -812,6 +931,10 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     if !status.success() {
         return Err(format!("{action} failed for {repository}").into());
     }
+    let victory = refs_before
+        .as_ref()
+        .and_then(|before| push_victory(&path, before).ok())
+        .filter(|victory| !victory.branches.is_empty());
     if created {
         fs::create_dir_all(destination.parent().expect("repository parent"))?;
         if let Err(error) = fs::rename(&path, &destination) {
@@ -825,6 +948,9 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
         if created || metadata_before != repository_metadata_id(&destination)? {
             write_cgit_config(config, &root)?;
         }
+    }
+    if let Some(victory) = victory {
+        print_push_victory(&victory);
     }
     Ok(())
 }
@@ -1110,6 +1236,49 @@ mod tests {
 
         configured_repositories(&config, &root, &root, &mut repositories).unwrap();
         assert!(repositories.is_empty());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn calculates_push_victory() {
+        let directory = test_directory("push-victory");
+        let source = directory.join("source");
+        let repository = directory.join("repository.git");
+        let git = |arguments: &[&str]| {
+            assert!(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(&source)
+                    .args(arguments)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        };
+        assert!(
+            Command::new("git")
+                .args(["init", "--quiet", "--initial-branch=main"])
+                .arg(&source)
+                .status()
+                .unwrap()
+                .success()
+        );
+        git(&["config", "user.name", "AURcade"]);
+        git(&["config", "user.email", "aurcade@example.invalid"]);
+        fs::write(source.join("score"), "one\n").unwrap();
+        git(&["add", "score"]);
+        git(&["commit", "--quiet", "-m", "one"]);
+        fs::write(source.join("score"), "two\n").unwrap();
+        git(&["commit", "--quiet", "-am", "two"]);
+        init_repository(&directory, "repository").unwrap();
+        let before = branch_refs(&repository).unwrap();
+        git(&["remote", "add", "origin", repository.to_str().unwrap()]);
+        git(&["push", "--quiet", "origin", "main"]);
+
+        let victory = push_victory(&repository, &before).unwrap();
+        assert_eq!(victory.commits, 2);
+        assert_eq!(victory.verified, 0);
+        assert_eq!(victory.branches, ["main"]);
         fs::remove_dir_all(directory).unwrap();
     }
 
