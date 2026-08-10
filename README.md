@@ -76,6 +76,12 @@ paths = ["example", "team/tools"] # An exact path grants access to one repositor
 paths = ["alice/"]  # Namespace; creates repositories on first push.
 ```
 
+Connect without a Git command to open the account's SSH lobby:
+
+```sh
+ssh -p 2222 git@localhost
+```
+
 ## Git
 
 ```sh

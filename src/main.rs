@@ -512,13 +512,64 @@ fn cleanup_failed_creation(path: &Path, created: bool, success: bool) -> Result<
     Ok(())
 }
 
+fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, Error> {
+    let mut repositories = BTreeSet::new();
+    configured_repositories(config, root, root, &mut repositories)?;
+    repositories.retain(|repository| {
+        account
+            .paths
+            .iter()
+            .any(|rule| path_matches(rule, repository))
+    });
+
+    let mut output = format!(
+        concat!(
+            "========================================\n",
+            "              A U R C A D E\n",
+            "         INSERT KEY TO CONTINUE\n",
+            "========================================\n",
+            "HOST: {}\n",
+            "PLAYER 1: {}  [KEY ACCEPTED]\n\n",
+            "AVAILABLE CARTRIDGES\n"
+        ),
+        config.title, account.name
+    );
+    if repositories.is_empty() {
+        output.push_str("--  NO CARTRIDGES LOADED\n");
+    }
+    for (index, repository) in repositories.iter().enumerate() {
+        let state = if repository_section(config, repository) == Some("shared") {
+            "CO-OP"
+        } else {
+            "READY"
+        };
+        output.push_str(&format!("{:02}  {repository}  [{state}]\n", index + 1));
+        for prefix in config.clone_prefix.split_whitespace() {
+            output.push_str(&format!(
+                "    {}/{repository}\n",
+                prefix.trim_end_matches('/')
+            ));
+        }
+    }
+    output.push_str("\nNO SHELL. ONLY GIT. GAME ON.\n");
+    Ok(output)
+}
+
 fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     let account = config
         .accounts
         .iter()
         .find(|account| account.name == account_name)
         .ok_or("unknown account")?;
-    let original = env::var("SSH_ORIGINAL_COMMAND").map_err(|_| "Git command required")?;
+    let original = match env::var("SSH_ORIGINAL_COMMAND") {
+        Ok(command) if !command.trim().is_empty() => command,
+        Ok(_) | Err(env::VarError::NotPresent) => {
+            print!("{}", ssh_lobby(config, account, &repo_root())?);
+            io::stdout().flush()?;
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    };
     let (action, repository) = parse_git_command(&original)?;
 
     let configured = config
@@ -676,6 +727,41 @@ mod tests {
             .description,
             ""
         );
+    }
+
+    #[test]
+    fn renders_account_ssh_lobby() {
+        let root = test_directory("ssh-lobby");
+        for repository in ["alice/game", "team/tools", "bob/private", "hidden"] {
+            let path = root.join(format!("{repository}.git"));
+            fs::create_dir_all(&path).unwrap();
+            fs::write(path.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        }
+        let config: Config = toml::from_str(
+            r#"
+                title = "Test Cabinet"
+                clone_prefix = "https://git.example ssh://git@git.example"
+                [[accounts]]
+                name = "alice"
+                ssh_keys = []
+                paths = ["alice/", "team/tools"]
+                [[accounts]]
+                name = "bob"
+                ssh_keys = []
+                paths = ["bob/", "team/tools"]
+            "#,
+        )
+        .unwrap();
+
+        let output = ssh_lobby(&config, &config.accounts[0], &root).unwrap();
+        assert!(output.contains("PLAYER 1: alice  [KEY ACCEPTED]"));
+        assert!(output.contains("01  alice/game  [READY]"));
+        assert!(output.contains("02  team/tools  [CO-OP]"));
+        assert!(output.contains("https://git.example/alice/game"));
+        assert!(output.contains("ssh://git@git.example/team/tools"));
+        assert!(!output.contains("bob/private"));
+        assert!(!output.contains("hidden"));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
