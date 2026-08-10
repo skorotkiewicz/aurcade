@@ -531,6 +531,8 @@ fn ensure_tls(config: &Config, domain: &str) -> Result<(PathBuf, PathBuf), Error
             || Command::new("openssl")
                 .args(["x509", "-checkhost", domain, "-noout", "-in"])
                 .arg(&certificate)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .status()?
                 .success()
         {
@@ -562,6 +564,8 @@ fn ensure_tls(config: &Config, domain: &str) -> Result<(PathBuf, PathBuf), Error
         .arg(&temporary_key)
         .arg("-out")
         .arg(&temporary_certificate)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()?;
     if !status.success() {
         return Err("failed to generate self-signed TLS certificate".into());
@@ -608,7 +612,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     let origin = serde_json::to_string(&format!("http://{domain}:8080"))?;
     let secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
     let ergo = format!(
-        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\n"
+        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
     );
 
     let gamja = serde_json::to_vec_pretty(&serde_json::json!({
@@ -1583,6 +1587,20 @@ mod tests {
         ))
         .unwrap();
         validate_config(&config).unwrap();
+        let dummy = hash_password("dummy").unwrap();
+        assert!(verify_password(
+            config.accounts.first(),
+            "correct horse battery staple",
+            &dummy
+        ));
+        assert!(!verify_password(config.accounts.first(), "wrong", &dummy));
+        assert!(!verify_password(
+            None,
+            "correct horse battery staple",
+            &dummy
+        ));
+        assert!(valid_domain("chat.example.com"));
+        assert!(!valid_domain("invalid_domain"));
     }
 
     #[test]

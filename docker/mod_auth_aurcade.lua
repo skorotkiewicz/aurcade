@@ -1,21 +1,21 @@
-local http = require "socket.http";
-local ltn12 = require "ltn12";
+local socket = require "socket";
 local new_sasl = require "prosody.util.sasl".new;
 
-local auth_url = module:get_option_string("aurcade_auth_url", "http://aurcade:9000");
+local auth_host = module:get_option_string("aurcade_auth_host", "aurcade");
+local auth_port = module:get_option_integer("aurcade_auth_port", 9000, 1, 65535);
 
 local function request(path, username, password)
-	local _, code = http.request({
-		url = auth_url .. path;
-		method = "POST";
-		headers = {
-			["X-Aurcade-Account"] = username;
-			["Content-Length"] = tostring(#password);
-		};
-		source = ltn12.source.string(password);
-		sink = ltn12.sink.table({});
-	});
-	return code == 204;
+	if not username:match("^[A-Za-z0-9_-]+$") then return false; end
+	local client = socket.tcp();
+	client:settimeout(10);
+	if not client:connect(auth_host, auth_port) then return false; end
+	local ok = client:send((
+		"POST %s HTTP/1.1\r\nHost: %s\r\nX-Aurcade-Account: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"
+	):format(path, auth_host, username, #password, password));
+	if not ok then client:close(); return false; end
+	local status = client:receive("*l");
+	client:close();
+	return status and status:match("^HTTP/1%.1 204 ") ~= nil;
 end
 
 local provider = {};

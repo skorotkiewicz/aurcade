@@ -12,6 +12,8 @@ aurcade setup
 if [ -f /etc/aurcade/irc.toml ] && [ -f /etc/aurcade/xmpp.toml ]; then
     aurcade generate-services
     cp /etc/aurcade/services/gamja-config.json /usr/share/webapps/gamja/config.json
+else
+    sed -i '/^wstunnel[.]server/d; /^wstunnel[.]frame-type/d' /etc/lighttpd/lighttpd.conf
 fi
 install -d -m 700 -o lighttpd -g lighttpd /var/cache/cgit
 find /var/cache/cgit -mindepth 1 -delete

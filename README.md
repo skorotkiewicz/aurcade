@@ -27,6 +27,10 @@ Create `config.toml`:
 
 ```toml
 title = "AURcade"
+domain = "example.com"
+# Omit both to generate persistent self-signed files under ./tls.
+# tls_certificate = "tls/fullchain.pem"
+# tls_private_key = "tls/privkey.pem"
 description = "My Git repositories"
 clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 style = "cgit-theme.css"
@@ -35,6 +39,7 @@ favicon = "aurcade-favicon.svg"
 
 [[accounts]]
 name = "alice"
+password_hash = "$argon2id$REPLACE_WITH_GENERATED_HASH"
 ssh_keys = ["ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"]
 gpg_keys = []
 gpg_key_files = []
@@ -76,7 +81,7 @@ Build locally instead:
 docker compose up --build -d
 ```
 
-Open <http://localhost:8080>. Compose routes HTTP through Anubis while SSH remains direct; `botPolicy.yaml` imports Anubis's maintained default policy. After AURcade configuration changes, run `docker restart aurcade`.
+Open <http://localhost:8080>. The optional commented Anubis service can protect HTTP while SSH remains direct. After account, domain, or service configuration changes, run `docker compose up -d --force-recreate`.
 
 ## Access
 
@@ -104,6 +109,35 @@ Soft-delete an owned, non-shared repository by moving it into `.aurcade-trash/` 
 
 ```sh
 ssh -p 2222 git@localhost delete alice/old-repo --confirm alice/old-repo
+```
+
+## Chat
+
+Compose runs Ergo IRC and Prosody XMPP with the same account names and `password_hash` values from `config.toml`. Configure service-specific options separately:
+
+```toml
+# irc.toml
+network = "AURcade"
+autojoin = ["#aurcade"]
+```
+
+```toml
+# xmpp.toml
+admins = ["alice"]
+```
+
+Endpoints:
+
+- Gamja: <http://localhost:8080/chat/>
+- IRC TLS: `localhost:6697`
+- XMPP clients: `alice@DOMAIN` on port `5222`
+- XMPP federation: port `5269`
+
+When both global TLS paths are omitted, AURcade generates a persistent self-signed certificate in `./tls`. Configure both paths to use a CA-issued certificate instead:
+
+```toml
+tls_certificate = "tls/fullchain.pem"
+tls_private_key = "tls/privkey.pem"
 ```
 
 ## Signed commits
