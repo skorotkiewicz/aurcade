@@ -31,6 +31,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     restart: unless-stopped
+    depends_on:
+      ergo:
+        condition: service_started
     expose:
       - "9000"
     ports:
@@ -58,9 +61,6 @@ services:
       context: .
       dockerfile: docker/Ergo.Dockerfile
     restart: unless-stopped
-    depends_on:
-      aurcade:
-        condition: service_healthy
     ports:
       - "6697:6697"
     volumes:
@@ -76,9 +76,6 @@ services:
       context: .
       dockerfile: docker/Prosody.Dockerfile
     restart: unless-stopped
-    depends_on:
-      aurcade:
-        condition: service_healthy
     ports:
       - "5222:5222"
       - "5269:5269"

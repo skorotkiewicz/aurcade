@@ -1,12 +1,6 @@
 .git
 target
-resources/*
-!resources/ergo
-!resources/ergo/**
-!resources/gamja
-!resources/gamja/**
-!resources/prosody-im
-!resources/prosody-im/**
+resources
 repositories
 ssh_host_keys
 config.toml

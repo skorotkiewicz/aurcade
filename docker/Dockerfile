@@ -1,5 +1,6 @@
 ARG CGIT_VERSION=1.3.1
 ARG GIT_VERSION=2.54.0
+ARG GAMJA_COMMIT=cdf94d62612e073cd632dca27779839f395153ec
 
 FROM alpine:3.21 AS cgit-build
 ARG CGIT_VERSION
@@ -21,11 +22,15 @@ RUN cd "cgit-${CGIT_VERSION}" \
         NO_TCLTK=YesPlease NO_SVN_TESTS=YesPlease NO_REGEX=NeedsStartEnd
 
 FROM node:24-alpine AS gamja-build
+ARG GAMJA_COMMIT
+RUN apk add --no-cache git
 WORKDIR /src
-COPY resources/gamja/package.json resources/gamja/package-lock.json ./
-RUN npm ci
-COPY resources/gamja ./
-RUN npm run build
+RUN git init \
+    && git remote add origin https://codeberg.org/emersion/gamja.git \
+    && git fetch --depth 1 origin "$GAMJA_COMMIT" \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "$GAMJA_COMMIT"
+RUN npm ci && npm run build
 
 FROM rust:1.85-alpine AS rust-build
 WORKDIR /src

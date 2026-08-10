@@ -363,10 +363,11 @@ fn tls_path(filename: &str) -> Result<PathBuf, Error> {
 }
 
 fn validate_config(config: &Config) -> Result<(), Error> {
-    if let Some(domain) = &config.domain
-        && !valid_domain(domain)
-    {
-        return Err(format!("invalid domain: {domain}").into());
+    match &config.domain {
+        Some(domain) if !valid_domain(domain) => {
+            return Err(format!("invalid domain: {domain}").into());
+        }
+        _ => {}
     }
     if config.tls_certificate.is_some() != config.tls_private_key.is_some() {
         return Err("tls_certificate and tls_private_key must be configured together".into());
@@ -526,9 +527,16 @@ fn ensure_tls(config: &Config, domain: &str) -> Result<(PathBuf, PathBuf), Error
         _ => unreachable!("validated TLS configuration"),
     };
     if regular_file(&certificate) && regular_file(&private_key) {
-        return Ok((certificate, private_key));
-    }
-    if supplied || certificate.exists() || private_key.exists() {
+        if supplied
+            || Command::new("openssl")
+                .args(["x509", "-checkhost", domain, "-noout", "-in"])
+                .arg(&certificate)
+                .status()?
+                .success()
+        {
+            return Ok((certificate, private_key));
+        }
+    } else if supplied || certificate.exists() || private_key.exists() {
         return Err("TLS certificate and private key must both be regular files".into());
     }
 
@@ -600,7 +608,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     let origin = serde_json::to_string(&format!("http://{domain}:8080"))?;
     let secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
     let ergo = format!(
-        "network:\n  name: {network}\nserver:\n  name: {domain}\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\n"
+        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\n"
     );
 
     let gamja = serde_json::to_vec_pretty(&serde_json::json!({
@@ -618,7 +626,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         .collect::<Vec<_>>()
         .join(", ");
     let prosody = format!(
-        "daemonize = false\nprosody_user = \"prosody\"\nprosody_group = \"prosody\"\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\nplugin_paths = {{ \"/usr/lib/prosody/custom_plugins\" }}\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"{certificate}\"; key = \"{private_key}\"; }}\nlog = {{ \"*console\"; }}\nVirtualHost \"{domain}\"\n"
+        "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ \"*console\"; }}\nVirtualHost \"{domain}\"\n"
     );
 
     let root = service_root();
@@ -626,6 +634,12 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     atomic_write(&root.join("ircd.yaml"), &ergo)?;
     atomic_write_bytes(&root.join("gamja-config.json"), &gamja)?;
     atomic_write(&root.join("prosody.cfg.lua"), &prosody)?;
+    atomic_write_bytes(&root.join("prosody-fullchain.pem"), &fs::read(certificate)?)?;
+    atomic_write_bytes(&root.join("prosody-privkey.pem"), &fs::read(private_key)?)?;
+    fs::set_permissions(
+        root.join("prosody-privkey.pem"),
+        fs::Permissions::from_mode(0o600),
+    )?;
     atomic_write_bytes(&root.join("aurcade"), &fs::read("/proc/self/exe")?)?;
     fs::set_permissions(root.join("aurcade"), fs::Permissions::from_mode(0o755))?;
     Ok(())
