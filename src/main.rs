@@ -447,7 +447,7 @@ fn write_cgit_config(config: &Config, root: &Path) -> Result<(), Error> {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("cgitrc"));
     let mut output = format!(
-        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo={}\nmimetype-file=/etc/mime.types\nabout-filter=/usr/local/bin/aurcade-about-filter\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\nreadme=:README.md\nreadme=:README\n",
+        "root-title={}\nroot-desc={}\nvirtual-root=/\nclone-prefix={}\ncss={}\nlogo={}\nmimetype-file=/etc/mime.types\nabout-filter=/usr/local/bin/aurcade-about-filter\nsource-filter=/usr/lib/cgit/filters/syntax-highlighting.sh\nenable-http-clone=1\nsnapshots=tar.gz zip\ncache-root=/var/cache/cgit\ncache-size=1000\ncache-dynamic-ttl=1\ncache-repo-ttl=1\ncache-root-ttl=1\ncache-about-ttl=1\nreadme=:README.md\nreadme=:README\n",
         config.title,
         config.description,
         config.clone_prefix,

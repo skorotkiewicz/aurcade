@@ -5,6 +5,8 @@ set -eu
 export AURCADE_ROOT
 
 aurcade setup
+install -d -m 700 -o lighttpd -g lighttpd /var/cache/cgit
+find /var/cache/cgit -mindepth 1 -delete
 chown -R git:git "$AURCADE_ROOT" /home/git/.ssh
 chown -R lighttpd:lighttpd /etc/aurcade/signing
 host_key=/etc/ssh/host_keys/ssh_host_ed25519_key
