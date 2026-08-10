@@ -512,6 +512,107 @@ fn cleanup_failed_creation(path: &Path, created: bool, success: bool) -> Result<
     Ok(())
 }
 
+fn verified_ssh_activity(
+    account: &Account,
+    root: &Path,
+    repositories: &BTreeSet<String>,
+) -> Result<([u32; 371], i64), Error> {
+    let today = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64 / 86_400;
+    let start = today - (today + 4).rem_euclid(7) - 52 * 7;
+    let allowed_signers = signing_root().join("allowed_signers");
+    let mut counts = [0_u32; 371];
+    let mut commits = HashSet::new();
+
+    // ponytail: verify on demand; cache by commit ID if large histories slow down the lobby.
+    for repository in repositories {
+        let path = root.join(format!("{repository}.git"));
+        let output = Command::new("git")
+            .arg("-c")
+            .arg(format!(
+                "gpg.ssh.allowedSignersFile={}",
+                allowed_signers.display()
+            ))
+            .arg("--git-dir")
+            .arg(path)
+            .args([
+                "log",
+                "--since=371.days.ago",
+                "--format=%H%x09%ct%x09%G?%x09%GS%x09%GF",
+                "HEAD",
+            ])
+            .stderr(Stdio::null())
+            .output()?;
+        if !output.status.success() {
+            continue;
+        }
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let mut fields = line.split('\t');
+            let (Some(commit), Some(timestamp), Some(status), Some(signer), Some(fingerprint)) = (
+                fields.next(),
+                fields.next(),
+                fields.next(),
+                fields.next(),
+                fields.next(),
+            ) else {
+                continue;
+            };
+            if fields.next().is_some()
+                || status != "G"
+                || signer != account.name
+                || !fingerprint.starts_with("SHA256:")
+            {
+                continue;
+            }
+            let Ok(day) = timestamp
+                .parse::<i64>()
+                .map(|timestamp| timestamp.div_euclid(86_400))
+            else {
+                continue;
+            };
+            if day >= start && day <= today && commits.insert(commit.to_owned()) {
+                counts[(day - start) as usize] += 1;
+            }
+        }
+    }
+    Ok((counts, today))
+}
+
+fn render_ssh_calendar(counts: &[u32; 371], today: i64) -> String {
+    let start = today - (today + 4).rem_euclid(7) - 52 * 7;
+    let total: u32 = counts.iter().sum();
+    let label = if total == 1 {
+        "CONTRIBUTION"
+    } else {
+        "CONTRIBUTIONS"
+    };
+    let mut output = format!("\nVERIFIED SSH ACTIVITY // {total} {label} // LAST 53 WEEKS\n");
+    for (weekday, label) in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        .iter()
+        .enumerate()
+    {
+        output.push_str(label);
+        output.push_str("  ");
+        for week in 0..53 {
+            let index = week * 7 + weekday;
+            let symbol = if start + index as i64 > today {
+                ' '
+            } else {
+                match counts[index] {
+                    0 => '·',
+                    1 => '░',
+                    2..=3 => '▒',
+                    4..=7 => '▓',
+                    _ => '█',
+                }
+            };
+            output.push(symbol);
+        }
+        output.push('\n');
+    }
+    output.push_str("     Less · ░ ▒ ▓ █ More\n");
+    output
+}
+
 fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, Error> {
     let mut repositories = BTreeSet::new();
     configured_repositories(config, root, root, &mut repositories)?;
@@ -551,6 +652,8 @@ fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, 
             ));
         }
     }
+    let (activity, today) = verified_ssh_activity(account, root, &repositories)?;
+    output.push_str(&render_ssh_calendar(&activity, today));
     output.push_str("\nNO SHELL. ONLY GIT. GAME ON.\n");
     Ok(output)
 }
@@ -759,6 +862,8 @@ mod tests {
         assert!(output.contains("02  team/tools  [CO-OP]"));
         assert!(output.contains("https://git.example/alice/game"));
         assert!(output.contains("ssh://git@git.example/team/tools"));
+        assert!(output.contains("VERIFIED SSH ACTIVITY // 0 CONTRIBUTIONS // LAST 53 WEEKS"));
+        assert!(output.contains("Less · ░ ▒ ▓ █ More"));
         assert!(!output.contains("bob/private"));
         assert!(!output.contains("hidden"));
         fs::remove_dir_all(root).unwrap();
