@@ -12,7 +12,7 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
     process::{self, Command, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 type Error = Box<dyn std::error::Error>;
@@ -176,17 +176,16 @@ fn authenticate_ergo(config: &Config) -> Result<(), Error> {
         return Err("Ergo authentication request is too large".into());
     }
     let request: ErgoAuthRequest = serde_json::from_str(&request)?;
-    let dummy_hash = hash_password("aurcade unknown account")?;
     let account = config
         .accounts
         .iter()
-        .find(|account| account.name == request.account_name);
-    let success = verify_password(account, &request.passphrase, &dummy_hash);
+        .find(|account| account.name.eq_ignore_ascii_case(&request.account_name));
+    let success = verify_password(account, &request.passphrase, DUMMY_PASSWORD_HASH);
     serde_json::to_writer(
         io::stdout(),
         &ErgoAuthResponse {
             success,
-            account_name: success.then_some(&request.account_name),
+            account_name: success.then(|| &account.expect("successful account").name),
         },
     )?;
     println!();
@@ -249,7 +248,7 @@ fn handle_auth_connection(
     let account = config
         .accounts
         .iter()
-        .find(|account| account.name == account_name);
+        .find(|account| account.name.eq_ignore_ascii_case(&account_name));
     let success = if path == Some("/exists") {
         account.is_some_and(|account| account.password_hash.is_some())
     } else {
@@ -270,13 +269,16 @@ fn handle_auth_connection(
     Ok(())
 }
 
+const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$Codfcvzi3WvRDiJy1x/spw$gsx6qpPNDr1Wczja5Zpk0S6R8x+Qp8qix78EfqMyOf4";
+
 fn auth_server(config: &Config) -> Result<(), Error> {
     let listener = TcpListener::bind("0.0.0.0:9000")?;
-    let dummy_hash = hash_password("aurcade unknown account")?;
     // ponytail: sequential auth is enough for a personal server; thread it if login load grows.
     for stream in listener.incoming() {
         let mut stream = stream?;
-        if let Err(error) = handle_auth_connection(config, &dummy_hash, &mut stream) {
+        stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(10)))?;
+        if let Err(error) = handle_auth_connection(config, DUMMY_PASSWORD_HASH, &mut stream) {
             eprintln!("aurcade: authentication request failed: {error}");
         }
     }
@@ -421,7 +423,7 @@ fn validate_config(config: &Config) -> Result<(), Error> {
         if let Some(hash) = &account.password_hash {
             validate_password_hash(hash)?;
         }
-        if !names.insert(&account.name) {
+        if !names.insert(account.name.to_ascii_lowercase()) {
             return Err(format!("duplicate account: {}", account.name).into());
         }
         for key in &account.ssh_keys {
@@ -619,7 +621,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     let origin = serde_json::to_string(&format!("http://{domain}:8080"))?;
     let secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
     let ergo = format!(
-        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
+        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\n      - \"http://localhost:8080\"\n      - \"http://127.0.0.1:8080\"\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
     );
 
     let gamja = serde_json::to_vec_pretty(&serde_json::json!({
