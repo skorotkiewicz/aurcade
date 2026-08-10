@@ -687,7 +687,8 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         let ident = &account.name[..account.name.len().min(20)];
         users.push_str(&format!(
             "<User {name}>\n    Admin = {admin}\n    Nick = {name}\n    Ident = {ident}\n    RealName = {name}\n    MultiClients = true\n    AutoClearChanBuffer = false\n    Buffer = 500\n    LoadModule = chansaver\n    LoadModule = log\n    <Pass password>\n        Method = Argon2id\n        Hash = {hash}\n    </Pass>\n    <Network {network}>\n        IRCConnectEnabled = true\n        Server = ergo 6667\n{channels}    </Network>\n</User>\n",
-            name = account.name
+            name = account.name,
+            network = irc.network
         ));
     }
     let znc = format!(
