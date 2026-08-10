@@ -185,7 +185,7 @@ fn authenticate_ergo(config: &Config) -> Result<(), Error> {
         io::stdout(),
         &ErgoAuthResponse {
             success,
-            account_name: success.then(|| &account.expect("successful account").name),
+            account_name: success.then(|| account.expect("successful account").name.as_str()),
         },
     )?;
     println!();
