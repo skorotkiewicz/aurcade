@@ -32,6 +32,8 @@ gpg_keys = []
 gpg_key_files = []
 # A trailing slash grants the namespace and allows first-push creation below it.
 paths = ["example", "team/tools", "alice/"]
+password_hash = "$argon2id$v=19$m=19456,t=2,p=1$2TfD1LlQo9U3skej4PLpsA$WSbatgAnsujML4DtTk4ChcdxV6gXvgN5F0MrtiV1bz8" # password: `demo`
+
 
 # Repeating a path grants both accounts write access.
 # [[accounts]]
