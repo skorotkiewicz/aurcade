@@ -528,13 +528,20 @@ fn ensure_tls(config: &Config, domain: &str) -> Result<(PathBuf, PathBuf), Error
     };
     if regular_file(&certificate) && regular_file(&private_key) {
         if supplied
-            || Command::new("openssl")
+            || (Command::new("openssl")
                 .args(["x509", "-checkhost", domain, "-noout", "-in"])
                 .arg(&certificate)
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()?
                 .success()
+                && Command::new("openssl")
+                    .args(["x509", "-checkend", "86400", "-noout", "-in"])
+                    .arg(&certificate)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()?
+                    .success())
         {
             return Ok((certificate, private_key));
         }

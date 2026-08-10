@@ -40,7 +40,7 @@ services:
       - "8080:80"
       - "2222:22"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/cgit.css"]
       interval: 5s
       timeout: 5s
       retries: 12

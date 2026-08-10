@@ -21,7 +21,7 @@ RUN cd "cgit-${CGIT_VERSION}" \
     && make -j"$(nproc)" NO_LUA=1 NO_ICONV=YesPlease NO_GETTEXT=YesPlease \
         NO_TCLTK=YesPlease NO_SVN_TESTS=YesPlease NO_REGEX=NeedsStartEnd
 
-FROM node:24-alpine AS gamja-build
+FROM node:24.19.0-alpine AS gamja-build
 ARG GAMJA_COMMIT
 RUN apk add --no-cache git
 WORKDIR /src
