@@ -133,6 +133,8 @@ Endpoints:
 - XMPP clients: `alice@DOMAIN` on port `5222`
 - XMPP federation: port `5269`
 
+ZNC logs IRC history in the persistent `znc_data` volume. WebAdmin changes to ZNC users or passwords are reset when ZNC restarts; edit `config.toml` and `znc.toml` instead.
+
 When both global TLS paths are omitted, AURcade generates a persistent self-signed certificate in `./tls`. Configure both paths to use a CA-issued certificate instead:
 
 ```toml
