@@ -30,7 +30,7 @@ RUN cargo build --locked --release
 FROM alpine:3.21
 ARG CGIT_VERSION
 ENV CGIT_CONFIG=/var/lib/aurcade/cgitrc
-RUN apk add --no-cache git gpg gpg-agent highlight lighttpd mailcap openssh-server py3-markdown py3-pygments \
+RUN apk add --no-cache git gpg gpg-agent gpgv highlight lighttpd mailcap openssh-server py3-markdown py3-pygments \
     && adduser -D -h /home/git git \
     && install -d -o git -g git /home/git/.ssh /var/lib/aurcade /etc/aurcade
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/cgit /usr/share/webapps/cgit/cgit.cgi
@@ -44,11 +44,12 @@ COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
 COPY docker/aurcade-logo.svg /usr/share/webapps/cgit/aurcade-logo.svg
 COPY docker/aurcade-favicon.svg /usr/share/webapps/cgit/aurcade-favicon.svg
 COPY docker/about-filter.py /usr/local/bin/aurcade-about-filter
+COPY docker/gpgv-wrapper.sh /usr/local/bin/aurcade-gpgv
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint
 RUN passwd -d git \
     && sed -i 's/ -X / -O xhtml /' /usr/lib/cgit/filters/syntax-highlighting.sh \
     && highlight -O xhtml --style-outfile=stdout --print-style >> /usr/share/webapps/cgit/cgit.css \
-    && chmod +x /usr/lib/cgit/filters/syntax-highlighting.sh /usr/local/bin/aurcade-about-filter /usr/local/bin/entrypoint \
+    && chmod +x /usr/lib/cgit/filters/syntax-highlighting.sh /usr/local/bin/aurcade-about-filter /usr/local/bin/aurcade-gpgv /usr/local/bin/entrypoint \
     && printf '\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers git\n' >> /etc/ssh/sshd_config
 EXPOSE 22 80
 VOLUME ["/var/lib/aurcade"]

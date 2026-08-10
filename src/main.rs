@@ -271,10 +271,12 @@ fn import_gpg_public_key(gnupg: &Path, account: &str, key: &str) -> Result<bool,
         .take()
         .ok_or("failed to open gpg stdin")?
         .write_all(key.as_bytes());
-    if write_result.is_err() || !child.wait()?.success() {
+    let status = child.wait()?;
+    let imported = write_result.is_ok() && status.success();
+    if !imported {
         eprintln!("aurcade: {account}: ignoring GPG public key rejected by gpg");
     }
-    Ok(true)
+    Ok(imported)
 }
 
 fn write_signing_trust(config: &Config, root: &Path) -> Result<(), Error> {
@@ -328,6 +330,11 @@ fn write_signing_trust(config: &Config, root: &Path) -> Result<(), Error> {
     let allowed_signers_path = root.join("allowed_signers");
     atomic_write(&allowed_signers_path, &allowed_signers)?;
     fs::set_permissions(allowed_signers_path, fs::Permissions::from_mode(0o644))?;
+    if used_gpg {
+        let keyring = root.join("trustedkeys.kbx");
+        fs::copy(gnupg.join("pubring.kbx"), &keyring)?;
+        fs::set_permissions(keyring, fs::Permissions::from_mode(0o644))?;
+    }
 
     if used_gpg
         && !Command::new("gpgconf")
@@ -801,8 +808,8 @@ fn push_victory(
             signing_root().join("allowed_signers").display()
         ))
         .arg("-c")
-        .arg("gpg.openpgp.program=/usr/bin/gpg")
-        .env("GNUPGHOME", signing_root().join("gnupg"))
+        .arg("gpg.openpgp.program=/usr/local/bin/aurcade-gpgv")
+        .env("GNUPGHOME", signing_root())
         .arg("--git-dir")
         .arg(repository)
         .args(["log", "--format=%H%x09%G?%x09%GS"])
@@ -821,7 +828,7 @@ fn push_victory(
         let mut fields = line.split('\t');
         if matches!(
             (fields.next(), fields.next(), fields.next(), fields.next()),
-            (Some(_), Some("G"), Some(signer), None) if !signer.is_empty()
+            (Some(_), Some("G" | "U"), Some(signer), None) if !signer.is_empty()
         ) {
             verified += 1;
         }
