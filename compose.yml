@@ -1,28 +1,28 @@
 name: aurcade
 
 services:
-  anubis:
-    image: ghcr.io/techarohq/anubis:v1.27.0
-    container_name: anubis
-    restart: unless-stopped
-    depends_on:
-      - aurcade
-    environment:
-      BIND: ":8080"
-      TARGET: "http://aurcade:80"
-      POLICY_FNAME: "/data/cfg/botPolicy.yaml"
-      # REDIRECT_DOMAINS: "aurcade.sekor.eu.org,http://localhost:8080,http://127.0.0.1:8080"
-      USE_REMOTE_ADDRESS: "true"
-    healthcheck:
-      test: ["CMD", "anubis", "--healthcheck"]
-      interval: 5s
-      timeout: 30s
-      retries: 5
-      start_period: 500ms
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./botPolicy.yaml:/data/cfg/botPolicy.yaml:ro
+  # anubis:
+  #   image: ghcr.io/techarohq/anubis:v1.27.0
+  #   container_name: anubis
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - aurcade
+  #   environment:
+  #     BIND: ":8080"
+  #     TARGET: "http://aurcade:80"
+  #     POLICY_FNAME: "/data/cfg/botPolicy.yaml"
+  #     # REDIRECT_DOMAINS: "aurcade.sekor.eu.org,http://localhost:8080,http://127.0.0.1:8080"
+  #     USE_REMOTE_ADDRESS: "true"
+  #   healthcheck:
+  #     test: ["CMD", "anubis", "--healthcheck"]
+  #     interval: 5s
+  #     timeout: 30s
+  #     retries: 5
+  #     start_period: 500ms
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./botPolicy.yaml:/data/cfg/botPolicy.yaml:ro
 
   aurcade:
     image: ghcr.io/skorotkiewicz/aurcade
@@ -32,6 +32,7 @@ services:
       dockerfile: docker/Dockerfile
     restart: unless-stopped
     ports:
+      - "8080:80"
       - "2222:22"
     volumes:
       - ./config.toml:/etc/aurcade/config.toml:ro
