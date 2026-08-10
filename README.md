@@ -1,8 +1,8 @@
 # AURcade
 
-<p align="center">
+<!--<p align="center">
   <img src="assets/aurcade-banner.svg" alt="AURcade retro arcade cabinet — insert SSH key to continue" width="100%">
-</p>
+</p>-->
 
 A tiny Git host with cgit over HTTP and authenticated pushes over SSH.
 
