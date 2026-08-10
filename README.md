@@ -6,6 +6,10 @@
 
 A tiny Git host with cgit over HTTP and authenticated pushes over SSH.
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="AURcade cgit interface" width="80%">
+</p>
+
 - cgit provides the web interface and HTTP clones.
 - SSH provides authenticated Git access.
 - `config.toml` defines accounts, SSH keys, and repository paths.
