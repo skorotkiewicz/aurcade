@@ -2,6 +2,7 @@ use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -68,7 +69,7 @@ struct XmppConfig {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ZncConfig {
+struct SojuConfig {
     #[serde(default)]
     admins: Vec<String>,
 }
@@ -217,12 +218,13 @@ fn handle_auth_connection(
     let mut request = request.split_ascii_whitespace();
     let method = request.next();
     let path = request.next();
-    if method != Some("POST") || !matches!(path, Some("/verify" | "/exists")) {
+    if method != Some("POST") || !matches!(path, Some("/verify" | "/exists" | "/soju")) {
         auth_response(stream, "404 Not Found")?;
         return Ok(());
     }
 
     let mut account_name = None;
+    let mut authorization = None;
     let mut content_length = 0;
     let mut header_bytes = 0;
     loop {
@@ -239,6 +241,7 @@ fn handle_auth_connection(
         if let Some((name, value)) = header.split_once(':') {
             match name.to_ascii_lowercase().as_str() {
                 "x-aurcade-account" => account_name = Some(value.trim().to_owned()),
+                "authorization" => authorization = Some(value.trim().to_owned()),
                 "content-length" => content_length = value.trim().parse().unwrap_or(usize::MAX),
                 _ => {}
             }
@@ -246,6 +249,29 @@ fn handle_auth_connection(
     }
     if content_length > 4096 {
         auth_response(stream, "400 Bad Request")?;
+        return Ok(());
+    }
+    if path == Some("/soju") {
+        let Some((account_name, password)) = authorization
+            .as_deref()
+            .and_then(basic_credentials)
+            .filter(|(name, _)| valid_account_name(name))
+        else {
+            auth_response(stream, "400 Bad Request")?;
+            return Ok(());
+        };
+        let account = config
+            .accounts
+            .iter()
+            .find(|account| account.name.eq_ignore_ascii_case(&account_name));
+        auth_response(
+            stream,
+            if verify_password(account, &password, dummy_hash) {
+                "200 OK"
+            } else {
+                "403 Forbidden"
+            },
+        )?;
         return Ok(());
     }
     let Some(account_name) = account_name.filter(|name| valid_account_name(name)) else {
@@ -274,6 +300,16 @@ fn handle_auth_connection(
         },
     )?;
     Ok(())
+}
+
+fn basic_credentials(header: &str) -> Option<(String, String)> {
+    let (scheme, encoded) = header.split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("basic") {
+        return None;
+    }
+    let decoded = String::from_utf8(BASE64.decode(encoded).ok()?).ok()?;
+    let (username, password) = decoded.split_once(':')?;
+    Some((username.to_owned(), password.to_owned()))
 }
 
 const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$Codfcvzi3WvRDiJy1x/spw$gsx6qpPNDr1Wczja5Zpk0S6R8x+Qp8qix78EfqMyOf4";
@@ -597,10 +633,10 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     let domain = config
         .domain
         .as_deref()
-        .ok_or("domain is required for IRC, XMPP, and ZNC")?;
+        .ok_or("domain is required for IRC, XMPP, and Soju")?;
     let irc: IrcConfig = load_service_config("AURCADE_IRC_CONFIG", "/etc/aurcade/irc.toml")?;
     let xmpp: XmppConfig = load_service_config("AURCADE_XMPP_CONFIG", "/etc/aurcade/xmpp.toml")?;
-    let znc: ZncConfig = load_service_config("AURCADE_ZNC_CONFIG", "/etc/aurcade/znc.toml")?;
+    let soju: SojuConfig = load_service_config("AURCADE_SOJU_CONFIG", "/etc/aurcade/soju.toml")?;
     if irc.network.is_empty()
         || irc.network.len() > 32
         || !irc
@@ -619,13 +655,13 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         || config
             .accounts
             .iter()
-            .any(|account| account.name.len() > 28)
+            .any(|account| account.name.len() > 32)
     {
         return Err(
-            "ZNC requires at least one account and account names of at most 28 bytes".into(),
+            "Soju requires at least one account and account names of at most 32 bytes".into(),
         );
     }
-    for (service, admins) in [("XMPP", &xmpp.admins), ("ZNC", &znc.admins)] {
+    for (service, admins) in [("XMPP", &xmpp.admins), ("Soju", &soju.admins)] {
         for admin in admins {
             if !config
                 .accounts
@@ -648,7 +684,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     let origin = serde_json::to_string(&format!("http://{domain}:8080"))?;
     let secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
     let ergo = format!(
-        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6667\":\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\n      - \"http://localhost:8080\"\n      - \"http://127.0.0.1:8080\"\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
+        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6667\":\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
     );
 
     let gamja = serde_json::to_vec_pretty(&serde_json::json!({
@@ -669,43 +705,31 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\ncertificates = \"/var/run/prosody/tls\"\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
     );
 
-    let channels = irc
-        .autojoin
-        .iter()
-        .map(|channel| format!("        <Chan {channel}>\n        </Chan>\n"))
-        .collect::<String>();
-    let mut users = String::new();
+    let soju_config = format!(
+        "listen ircs://:6698\nlisten ws+insecure://:8080\nlisten unix+admin:///run/soju/admin\ntls /soju-data/tls/fullchain.pem /soju-data/tls/privkey.pem\nhostname {domain}\ntitle {network}\ndb sqlite3 /soju-data/soju.db\nmessage-store db\nauth http http://aurcade:9000/soju\nenable-user-on-auth true\nhttp-origin {origin} {secure_origin} \"http://localhost:8080\" \"http://127.0.0.1:8080\"\n"
+    );
+    let mut soju_users = String::new();
     for account in &config.accounts {
-        let hash = account
-            .password_hash
-            .as_deref()
-            .unwrap_or(DUMMY_PASSWORD_HASH);
-        let admin = znc
+        let admin = soju
             .admins
             .iter()
             .any(|admin| admin.eq_ignore_ascii_case(&account.name));
-        let ident = &account.name[..account.name.len().min(20)];
-        let nick = format!("{}_znc", account.name);
-        users.push_str(&format!(
-            "<User {name}>\n    Admin = {admin}\n    Nick = {nick}\n    Ident = {ident}\n    RealName = {name}\n    MultiClients = true\n    AutoClearChanBuffer = false\n    Buffer = 500\n    LoadModule = chansaver\n    LoadModule = log\n    <Pass password>\n        Method = Argon2id\n        Hash = {hash}\n    </Pass>\n    <Network {network}>\n        IRCConnectEnabled = true\n        Server = ergo 6667\n{channels}    </Network>\n</User>\n",
-            name = account.name,
-            network = irc.network
-        ));
+        soju_users.push_str(&format!("{}\t{}\t{}\n", account.name, admin, irc.network));
     }
-    let znc = format!(
-        "Version = 1.9.1\nSSLCertFile = /znc-data/znc.pem\nLoadModule = webadmin\nProtectWebSessions = true\n<Listener listener0>\n    AllowIRC = true\n    AllowWeb = true\n    IPv4 = true\n    IPv6 = true\n    Port = 6698\n    SSL = true\n</Listener>\n{users}"
-    );
-    let mut znc_pem = fs::read(private_key)?;
-    znc_pem.extend_from_slice(&fs::read(certificate)?);
 
     let root = service_root();
     fs::create_dir_all(&root)?;
     atomic_write(&root.join("ircd.yaml"), &ergo)?;
     atomic_write_bytes(&root.join("gamja-config.json"), &gamja)?;
     atomic_write(&root.join("prosody.cfg.lua"), &prosody)?;
-    atomic_write(&root.join("znc.conf"), &znc)?;
-    atomic_write_bytes(&root.join("znc.pem"), &znc_pem)?;
-    fs::set_permissions(root.join("znc.pem"), fs::Permissions::from_mode(0o600))?;
+    atomic_write(&root.join("soju.conf"), &soju_config)?;
+    atomic_write(&root.join("soju-users"), &soju_users)?;
+    atomic_write_bytes(&root.join("soju-fullchain.pem"), &fs::read(certificate)?)?;
+    atomic_write_bytes(&root.join("soju-privkey.pem"), &fs::read(private_key)?)?;
+    fs::set_permissions(
+        root.join("soju-privkey.pem"),
+        fs::Permissions::from_mode(0o600),
+    )?;
     atomic_write_bytes(&root.join("prosody-fullchain.pem"), &fs::read(certificate)?)?;
     atomic_write_bytes(&root.join("prosody-privkey.pem"), &fs::read(private_key)?)?;
     fs::set_permissions(
@@ -1667,6 +1691,11 @@ mod tests {
             "correct horse battery staple",
             &dummy
         ));
+        assert_eq!(
+            basic_credentials("Basic YWxpY2U6cGE6c3M="),
+            Some(("alice".into(), "pa:ss".into()))
+        );
+        assert!(basic_credentials("Bearer invalid").is_none());
         assert!(valid_domain("chat.example.com"));
         assert!(!valid_domain("invalid_domain"));
     }

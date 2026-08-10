@@ -120,7 +120,7 @@ admins = ["alice"]
 ```
 
 ```toml
-# znc.toml
+# soju.toml
 admins = ["alice"]
 ```
 
@@ -128,12 +128,11 @@ Endpoints:
 
 - Gamja: <http://localhost:8080/chat/>
 - IRC TLS: `localhost:6697`
-- ZNC IRC TLS: `localhost:6698`
-- ZNC WebAdmin: <https://localhost:6698/>
+- Soju IRC TLS: `localhost:6698`
 - XMPP clients: `alice@DOMAIN` on port `5222`
 - XMPP federation: port `5269`
 
-ZNC logs IRC history in the persistent `znc_data` volume. WebAdmin changes to ZNC users or passwords are reset when ZNC restarts; edit `config.toml` and `znc.toml` instead.
+Gamja connects through Soju, so browser and native bouncer clients share one upstream session and persistent history in `soju_data`. Accounts and passwords remain authoritative in `config.toml`; administrators are listed in `soju.toml`.
 
 When both global TLS paths are omitted, AURcade generates a persistent self-signed certificate in `./tls`. Configure both paths to use a CA-issued certificate instead:
 

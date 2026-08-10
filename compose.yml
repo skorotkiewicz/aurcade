@@ -48,7 +48,7 @@ services:
       - ./config.toml:/etc/aurcade/config.toml:ro
       - ./irc.toml:/etc/aurcade/irc.toml:ro
       - ./xmpp.toml:/etc/aurcade/xmpp.toml:ro
-      - ./znc.toml:/etc/aurcade/znc.toml:ro
+      - ./soju.toml:/etc/aurcade/soju.toml:ro
       - ./keys:/etc/aurcade/keys:ro
       - ./tls:/etc/aurcade/tls
       - ./repositories:/var/lib/aurcade
@@ -85,12 +85,12 @@ services:
       - service_config:/etc/aurcade/services:ro
       - prosody_data:/var/lib/prosody
 
-  znc:
-    image: aurcade-znc
-    container_name: znc
+  soju:
+    image: aurcade-soju
+    container_name: soju
     build:
       context: .
-      dockerfile: docker/Znc.Dockerfile
+      dockerfile: docker/Soju.Dockerfile
     restart: unless-stopped
     depends_on:
       aurcade:
@@ -101,10 +101,10 @@ services:
       - "6698:6698"
     volumes:
       - service_config:/etc/aurcade/services:ro
-      - znc_data:/znc-data
+      - soju_data:/soju-data
 
 volumes:
   ergo_data:
   prosody_data:
-  znc_data:
+  soju_data:
   service_config:
