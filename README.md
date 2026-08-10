@@ -31,6 +31,7 @@ description = "My Git repositories"
 clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 style = "cgit-theme.css"
 logo = "aurcade-logo.svg"
+favicon = "aurcade-favicon.svg"
 
 [[accounts]]
 name = "alice"

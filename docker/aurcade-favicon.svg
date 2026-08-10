@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">AURcade favicon</title>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#0d071e" stroke="#ff4fd8" stroke-width="3"/>
+  <path d="M18 46h28l6 10H12z" fill="#382052" stroke="#49e7ff" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M32 45V24m0 9h13v-9" fill="none" stroke="#49e7ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="17" r="9" fill="#ffe66d" stroke="#fff2a8" stroke-width="2"/>
+  <circle cx="45" cy="22" r="4" fill="#7dff9b"/>
+  <circle cx="32" cy="36" r="4" fill="#ff4fd8"/>
+</svg>

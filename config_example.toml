@@ -5,6 +5,8 @@ clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
 # style = "cgit-theme.css"
 # Optional image filename; defaults to cgit.png.
 # logo = "aurcade-logo.svg"
+# Optional favicon filename; defaults to favicon.ico.
+# favicon = "aurcade-favicon.svg"
 
 # Restart the container after changing accounts, keys, or paths.
 [[accounts]]
