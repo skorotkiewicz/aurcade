@@ -227,6 +227,7 @@ fn setup(config: &Config) -> Result<(), Error> {
     write_authorized_keys(config)?;
     write_signing_trust(config, &signing_root())?;
     write_cgit_config(config, &root)?;
+    clear_activity_caches(&root)?;
     Ok(())
 }
 
@@ -512,12 +513,40 @@ fn cleanup_failed_creation(path: &Path, created: bool, success: bool) -> Result<
     Ok(())
 }
 
+fn unix_time() -> Result<u64, Error> {
+    Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
+}
+
+fn utc_day() -> Result<i64, Error> {
+    Ok(unix_time()? as i64 / 86_400)
+}
+
+fn account_repositories(
+    config: &Config,
+    account: &Account,
+    root: &Path,
+) -> Result<BTreeSet<String>, Error> {
+    let mut repositories = BTreeSet::new();
+    configured_repositories(config, root, root, &mut repositories)?;
+    repositories.retain(|repository| {
+        account
+            .paths
+            .iter()
+            .any(|rule| path_matches(rule, repository))
+    });
+    Ok(repositories)
+}
+
+fn activity_cache_path(root: &Path, account: &Account) -> PathBuf {
+    root.join(".aurcade-activity").join(&account.name)
+}
+
 fn verified_ssh_activity(
     account: &Account,
     root: &Path,
     repositories: &BTreeSet<String>,
 ) -> Result<([u32; 371], i64), Error> {
-    let today = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64 / 86_400;
+    let today = utc_day()?;
     let start = today - (today + 4).rem_euclid(7) - 52 * 7;
     let allowed_signers = signing_root().join("allowed_signers");
     let mut counts = [0_u32; 371];
@@ -613,15 +642,70 @@ fn render_ssh_calendar(counts: &[u32; 371], today: i64) -> String {
     output
 }
 
-fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, Error> {
-    let mut repositories = BTreeSet::new();
-    configured_repositories(config, root, root, &mut repositories)?;
-    repositories.retain(|repository| {
-        account
+fn generate_activity_cache(
+    account: &Account,
+    root: &Path,
+    repositories: &BTreeSet<String>,
+) -> Result<String, Error> {
+    let (activity, today) = verified_ssh_activity(account, root, repositories)?;
+    let calendar = render_ssh_calendar(&activity, today);
+    atomic_write(
+        &activity_cache_path(root, account),
+        &format!("{}\n{calendar}", unix_time()?.saturating_add(86_400)),
+    )?;
+    Ok(calendar)
+}
+
+fn cached_ssh_calendar(
+    account: &Account,
+    root: &Path,
+    repositories: &BTreeSet<String>,
+) -> Result<String, Error> {
+    let path = activity_cache_path(root, account);
+    let now = unix_time()?;
+    match fs::read_to_string(&path) {
+        Ok(cache) => match cache.split_once('\n') {
+            Some((expires, calendar))
+                if expires.parse::<u64>().is_ok_and(|expires| expires > now) =>
+            {
+                return Ok(calendar.to_owned());
+            }
+            _ => {}
+        },
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    generate_activity_cache(account, root, repositories)
+}
+
+fn clear_activity_caches(root: &Path) -> Result<(), Error> {
+    match fs::remove_dir_all(root.join(".aurcade-activity")) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn invalidate_activity_caches(config: &Config, root: &Path, repository: &str) -> Result<(), Error> {
+    for account in &config.accounts {
+        if !account
             .paths
             .iter()
             .any(|rule| path_matches(rule, repository))
-    });
+        {
+            continue;
+        }
+        match fs::remove_file(activity_cache_path(root, account)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
+fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, Error> {
+    let repositories = account_repositories(config, account, root)?;
 
     let mut output = format!(
         concat!(
@@ -652,8 +736,7 @@ fn ssh_lobby(config: &Config, account: &Account, root: &Path) -> Result<String, 
             ));
         }
     }
-    let (activity, today) = verified_ssh_activity(account, root, &repositories)?;
-    output.push_str(&render_ssh_calendar(&activity, today));
+    output.push_str(&cached_ssh_calendar(account, root, &repositories)?);
     output.push_str("\nNO SHELL. ONLY GIT. GAME ON.\n");
     Ok(output)
 }
@@ -737,10 +820,11 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
         }
         fs::remove_dir_all(&staging)?;
     }
-    if action == "git-receive-pack"
-        && (created || metadata_before != repository_metadata_id(&destination)?)
-    {
-        write_cgit_config(config, &root)?;
+    if action == "git-receive-pack" {
+        invalidate_activity_caches(config, &root, &repository)?;
+        if created || metadata_before != repository_metadata_id(&destination)? {
+            write_cgit_config(config, &root)?;
+        }
     }
     Ok(())
 }
@@ -866,6 +950,28 @@ mod tests {
         assert!(output.contains("Less · ░ ▒ ▓ █ More"));
         assert!(!output.contains("bob/private"));
         assert!(!output.contains("hidden"));
+
+        let cache = activity_cache_path(&root, &config.accounts[0]);
+        assert!(cache.is_file());
+        fs::write(
+            &cache,
+            format!(
+                "{}\nCACHED CALENDAR\n",
+                unix_time().unwrap().saturating_add(86_400)
+            ),
+        )
+        .unwrap();
+        assert!(
+            ssh_lobby(&config, &config.accounts[0], &root)
+                .unwrap()
+                .contains("CACHED CALENDAR")
+        );
+        fs::write(&cache, "0\nEXPIRED CALENDAR\n").unwrap();
+        let refreshed = ssh_lobby(&config, &config.accounts[0], &root).unwrap();
+        assert!(!refreshed.contains("EXPIRED CALENDAR"));
+        assert!(refreshed.contains("VERIFIED SSH ACTIVITY"));
+        invalidate_activity_caches(&config, &root, "team/tools").unwrap();
+        assert!(!cache.exists());
         fs::remove_dir_all(root).unwrap();
     }
 
