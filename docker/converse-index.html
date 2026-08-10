@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AURcade XMPP</title>
+    <link rel="stylesheet" type="text/css" href="/xmpp/converse.min.css">
+</head>
+<body>
+    <div id="conversejs"></div>
+    <noscript><p>Converse requires JavaScript to run.</p></noscript>
+    <script src="/xmpp/converse.min.js"></script>
+    <script>
+        converse.initialize({
+            websocket_url: "/xmpp-websocket",
+            view_mode: "fullscreen",
+            allow_registration: false,
+            allow_bookmarks: false,
+            allow_contact_requests: true,
+            allow_logout: true,
+            message_archiving: "always"
+        });
+    </script>
+</body>
+</html>

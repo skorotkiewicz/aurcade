@@ -77,6 +77,8 @@ services:
       context: .
       dockerfile: docker/Prosody.Dockerfile
     restart: unless-stopped
+    expose:
+      - "5280"
     ports:
       - "5222:5222"
       - "5269:5269"

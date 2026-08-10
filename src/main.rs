@@ -702,7 +702,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         .collect::<Vec<_>>()
         .join(", ");
     let prosody = format!(
-        "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\ncertificates = \"/var/run/prosody/tls\"\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
+        "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\ncertificates = \"/var/run/prosody/tls\"\nhttp_ports = {{ 5280 }}\nconsider_websocket_secure = true\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; \"websocket\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
     );
 
     let soju_config = format!(

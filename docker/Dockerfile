@@ -32,6 +32,13 @@ RUN git init \
     && test "$(git rev-parse HEAD)" = "$GAMJA_COMMIT"
 RUN npm ci && npm run build
 
+FROM node:24.19.0-alpine AS converse-build
+RUN apk add --no-cache ca-certificates
+WORKDIR /src
+RUN wget -q "https://github.com/conversejs/converse.js/releases/download/v9.1.1/converse.js-9.1.1.tgz" \
+    && tar -xzf converse.js-9.1.1.tgz \
+    && mv package/dist dist
+
 FROM rust:1.85-alpine AS rust-build
 WORKDIR /src
 RUN apk add --no-cache musl-dev
@@ -52,6 +59,8 @@ COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/about-formatting.sh /us
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/html-converters/ /usr/lib/cgit/filters/html-converters/
 COPY --from=rust-build /src/target/release/aurcade /usr/local/bin/aurcade
 COPY --from=gamja-build /src/dist/ /usr/share/webapps/gamja/
+COPY --from=converse-build /src/dist/ /usr/share/webapps/converse/
+COPY docker/converse-index.html /usr/share/webapps/converse/index.html
 COPY docker/lighttpd.conf /etc/lighttpd/lighttpd.conf
 COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
 COPY docker/aurcade-logo.svg /usr/share/webapps/cgit/aurcade-logo.svg
