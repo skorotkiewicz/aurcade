@@ -93,8 +93,6 @@ services:
       dockerfile: docker/Soju.Dockerfile
     restart: unless-stopped
     depends_on:
-      aurcade:
-        condition: service_healthy
       ergo:
         condition: service_started
     ports:
