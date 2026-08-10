@@ -66,6 +66,13 @@ struct XmppConfig {
     admins: Vec<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ZncConfig {
+    #[serde(default)]
+    admins: Vec<String>,
+}
+
 fn default_irc_network() -> String {
     "AURcade".into()
 }
@@ -590,23 +597,43 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     let domain = config
         .domain
         .as_deref()
-        .ok_or("domain is required for IRC and XMPP")?;
+        .ok_or("domain is required for IRC, XMPP, and ZNC")?;
     let irc: IrcConfig = load_service_config("AURCADE_IRC_CONFIG", "/etc/aurcade/irc.toml")?;
     let xmpp: XmppConfig = load_service_config("AURCADE_XMPP_CONFIG", "/etc/aurcade/xmpp.toml")?;
+    let znc: ZncConfig = load_service_config("AURCADE_ZNC_CONFIG", "/etc/aurcade/znc.toml")?;
     if irc.network.is_empty()
-        || irc.network.len() > 64
-        || irc.network.contains(['\n', '\r'])
+        || irc.network.len() > 32
+        || !irc
+            .network
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
         || irc.autojoin.iter().any(|channel| {
             !channel.starts_with('#')
                 || channel.len() < 2
-                || channel.contains([' ', ',', '\n', '\r'])
+                || channel.contains([' ', ',', '<', '>', '\n', '\r'])
         })
     {
         return Err("invalid IRC network or autojoin channel".into());
     }
-    for admin in &xmpp.admins {
-        if !config.accounts.iter().any(|account| &account.name == admin) {
-            return Err(format!("unknown XMPP admin account: {admin}").into());
+    if config.accounts.is_empty()
+        || config
+            .accounts
+            .iter()
+            .any(|account| account.name.len() > 32)
+    {
+        return Err(
+            "ZNC requires at least one account and account names of at most 32 bytes".into(),
+        );
+    }
+    for (service, admins) in [("XMPP", &xmpp.admins), ("ZNC", &znc.admins)] {
+        for admin in admins {
+            if !config
+                .accounts
+                .iter()
+                .any(|account| account.name.eq_ignore_ascii_case(admin))
+            {
+                return Err(format!("unknown {service} admin account: {admin}").into());
+            }
         }
     }
 
@@ -621,7 +648,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     let origin = serde_json::to_string(&format!("http://{domain}:8080"))?;
     let secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
     let ergo = format!(
-        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\n      - \"http://localhost:8080\"\n      - \"http://127.0.0.1:8080\"\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
+        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6667\": {{}}\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\n    \":8067\":\n      websocket: true\n  websockets:\n    allowed-origins:\n      - {origin}\n      - {secure_origin}\n      - \"http://localhost:8080\"\n      - \"http://127.0.0.1:8080\"\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
     );
 
     let gamja = serde_json::to_vec_pretty(&serde_json::json!({
@@ -642,11 +669,41 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\ncertificates = \"/var/run/prosody/tls\"\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
     );
 
+    let channels = irc
+        .autojoin
+        .iter()
+        .map(|channel| format!("        <Chan {channel}>\n        </Chan>\n"))
+        .collect::<String>();
+    let mut users = String::new();
+    for account in &config.accounts {
+        let hash = account
+            .password_hash
+            .as_deref()
+            .unwrap_or(DUMMY_PASSWORD_HASH);
+        let admin = znc
+            .admins
+            .iter()
+            .any(|admin| admin.eq_ignore_ascii_case(&account.name));
+        let ident = &account.name[..account.name.len().min(20)];
+        users.push_str(&format!(
+            "<User {name}>\n    Admin = {admin}\n    Nick = {name}\n    Ident = {ident}\n    RealName = {name}\n    MultiClients = true\n    AutoClearChanBuffer = false\n    Buffer = 500\n    LoadModule = chansaver\n    LoadModule = log\n    <Pass password>\n        Method = Argon2id\n        Hash = {hash}\n    </Pass>\n    <Network {network}>\n        IRCConnectEnabled = true\n        Server = ergo 6667\n{channels}    </Network>\n</User>\n",
+            name = account.name
+        ));
+    }
+    let znc = format!(
+        "Version = 1.9.1\nSSLCertFile = /znc-data/znc.pem\nLoadModule = webadmin\nProtectWebSessions = true\n<Listener listener0>\n    AllowIRC = true\n    AllowWeb = true\n    IPv4 = true\n    IPv6 = true\n    Port = 6698\n    SSL = true\n</Listener>\n{users}"
+    );
+    let mut znc_pem = fs::read(private_key)?;
+    znc_pem.extend_from_slice(&fs::read(certificate)?);
+
     let root = service_root();
     fs::create_dir_all(&root)?;
     atomic_write(&root.join("ircd.yaml"), &ergo)?;
     atomic_write_bytes(&root.join("gamja-config.json"), &gamja)?;
     atomic_write(&root.join("prosody.cfg.lua"), &prosody)?;
+    atomic_write(&root.join("znc.conf"), &znc)?;
+    atomic_write_bytes(&root.join("znc.pem"), &znc_pem)?;
+    fs::set_permissions(root.join("znc.pem"), fs::Permissions::from_mode(0o600))?;
     atomic_write_bytes(&root.join("prosody-fullchain.pem"), &fs::read(certificate)?)?;
     atomic_write_bytes(&root.join("prosody-privkey.pem"), &fs::read(private_key)?)?;
     fs::set_permissions(

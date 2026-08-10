@@ -9,7 +9,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 aurcade setup
-if [ -f /etc/aurcade/irc.toml ] && [ -f /etc/aurcade/xmpp.toml ]; then
+if [ -f /etc/aurcade/irc.toml ] && [ -f /etc/aurcade/xmpp.toml ] && [ -f /etc/aurcade/znc.toml ]; then
     aurcade generate-services
     cp /etc/aurcade/services/gamja-config.json /usr/share/webapps/gamja/config.json
 else

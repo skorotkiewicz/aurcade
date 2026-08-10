@@ -48,6 +48,7 @@ services:
       - ./config.toml:/etc/aurcade/config.toml:ro
       - ./irc.toml:/etc/aurcade/irc.toml:ro
       - ./xmpp.toml:/etc/aurcade/xmpp.toml:ro
+      - ./znc.toml:/etc/aurcade/znc.toml:ro
       - ./keys:/etc/aurcade/keys:ro
       - ./tls:/etc/aurcade/tls
       - ./repositories:/var/lib/aurcade
@@ -84,7 +85,26 @@ services:
       - service_config:/etc/aurcade/services:ro
       - prosody_data:/var/lib/prosody
 
+  znc:
+    image: aurcade-znc
+    container_name: znc
+    build:
+      context: .
+      dockerfile: docker/Znc.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      aurcade:
+        condition: service_healthy
+      ergo:
+        condition: service_started
+    ports:
+      - "6698:6698"
+    volumes:
+      - service_config:/etc/aurcade/services:ro
+      - znc_data:/znc-data
+
 volumes:
   ergo_data:
   prosody_data:
+  znc_data:
   service_config:

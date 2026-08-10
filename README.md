@@ -119,10 +119,17 @@ autojoin = ["#aurcade"]
 admins = ["alice"]
 ```
 
+```toml
+# znc.toml
+admins = ["alice"]
+```
+
 Endpoints:
 
 - Gamja: <http://localhost:8080/chat/>
 - IRC TLS: `localhost:6697`
+- ZNC IRC TLS: `localhost:6698`
+- ZNC WebAdmin: <https://localhost:6698/>
 - XMPP clients: `alice@DOMAIN` on port `5222`
 - XMPP federation: port `5269`
 
