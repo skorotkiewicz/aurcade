@@ -619,10 +619,10 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         || config
             .accounts
             .iter()
-            .any(|account| account.name.len() > 32)
+            .any(|account| account.name.len() > 28)
     {
         return Err(
-            "ZNC requires at least one account and account names of at most 32 bytes".into(),
+            "ZNC requires at least one account and account names of at most 28 bytes".into(),
         );
     }
     for (service, admins) in [("XMPP", &xmpp.admins), ("ZNC", &znc.admins)] {
@@ -685,8 +685,9 @@ fn generate_services(config: &Config) -> Result<(), Error> {
             .iter()
             .any(|admin| admin.eq_ignore_ascii_case(&account.name));
         let ident = &account.name[..account.name.len().min(20)];
+        let nick = format!("{}_znc", account.name);
         users.push_str(&format!(
-            "<User {name}>\n    Admin = {admin}\n    Nick = {name}\n    Ident = {ident}\n    RealName = {name}\n    MultiClients = true\n    AutoClearChanBuffer = false\n    Buffer = 500\n    LoadModule = chansaver\n    LoadModule = log\n    <Pass password>\n        Method = Argon2id\n        Hash = {hash}\n    </Pass>\n    <Network {network}>\n        IRCConnectEnabled = true\n        Server = ergo 6667\n{channels}    </Network>\n</User>\n",
+            "<User {name}>\n    Admin = {admin}\n    Nick = {nick}\n    Ident = {ident}\n    RealName = {name}\n    MultiClients = true\n    AutoClearChanBuffer = false\n    Buffer = 500\n    LoadModule = chansaver\n    LoadModule = log\n    <Pass password>\n        Method = Argon2id\n        Hash = {hash}\n    </Pass>\n    <Network {network}>\n        IRCConnectEnabled = true\n        Server = ergo 6667\n{channels}    </Network>\n</User>\n",
             name = account.name,
             network = irc.network
         ));
