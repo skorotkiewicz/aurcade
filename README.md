@@ -91,6 +91,12 @@ git remote add origin ssh://git@localhost:2222/alice/newrepo.git
 git push -u origin main
 ```
 
+Soft-delete an owned, non-shared repository by moving it into `.aurcade-trash/` inside the repository mount:
+
+```sh
+ssh -p 2222 git@localhost delete alice/old-repo --confirm alice/old-repo
+```
+
 ## Signed commits
 
 SSH-signed commits are verified with the account's `ssh_keys`. For GPG signatures, add complete armored public keys:

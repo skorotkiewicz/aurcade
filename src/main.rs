@@ -171,6 +171,10 @@ fn normalize_repo(path: &str) -> Result<String, Error> {
         .strip_suffix(".git")
         .unwrap_or(path.trim_matches('/'));
     if path.is_empty()
+        || matches!(
+            path.split('/').next(),
+            Some(".aurcade-trash" | ".aurcade-activity")
+        )
         || path.split('/').any(|part| {
             part.is_empty()
                 || matches!(part, "." | "..")
@@ -380,6 +384,14 @@ fn configured_repositories(
             continue;
         }
         let path = entry.path();
+        if path
+            .strip_prefix(root)?
+            .components()
+            .next()
+            .is_some_and(|component| component == Component::Normal(".aurcade-trash".as_ref()))
+        {
+            continue;
+        }
         if path.join("HEAD").is_file() {
             if let Some(repository) = path
                 .strip_prefix(root)?
@@ -862,6 +874,52 @@ fn print_push_victory(victory: &PushVictory) {
     );
 }
 
+fn delete_repository(
+    config: &Config,
+    account: &Account,
+    root: &Path,
+    repository: &str,
+) -> Result<PathBuf, Error> {
+    if !account
+        .paths
+        .iter()
+        .any(|rule| path_matches(rule, repository))
+    {
+        return Err(format!("access denied: {repository}").into());
+    }
+    if repository_section(config, repository) == Some("shared") {
+        return Err(format!("shared repository cannot be deleted over SSH: {repository}").into());
+    }
+
+    let source = root.join(format!("{repository}.git"));
+    let head = source.join("HEAD");
+    if !fs::symlink_metadata(&source)?.file_type().is_dir()
+        || !fs::symlink_metadata(&head)?.file_type().is_file()
+    {
+        return Err(format!("repository not initialized: {repository}").into());
+    }
+
+    invalidate_activity_caches(config, root, repository)?;
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let trash = root
+        .join(".aurcade-trash")
+        .join(format!("{nonce}-{}", process::id()))
+        .join(format!("{repository}.git"));
+    fs::create_dir_all(trash.parent().expect("trash parent"))?;
+    // ponytail: atomic rename is sufficient while deletion remains recoverable from trash.
+    fs::rename(&source, &trash)?;
+    if let Err(error) = write_cgit_config(config, root) {
+        if let Err(rollback) = fs::rename(&trash, &source) {
+            return Err(format!(
+                "failed to update cgit after deleting {repository}: {error}; rollback failed: {rollback}"
+            )
+            .into());
+        }
+        return Err(error);
+    }
+    Ok(trash.strip_prefix(root)?.to_owned())
+}
+
 fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     let account = config
         .accounts
@@ -877,6 +935,16 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
         }
         Err(error) => return Err(error.into()),
     };
+    let root = repo_root();
+    if let Some(repository) = parse_delete_command(&original)? {
+        let trash = delete_repository(config, account, &root, &repository)?;
+        println!(
+            "CARTRIDGE EJECTED!\n{repository} moved to {}\nRESTORE POINT SAVED.",
+            trash.display()
+        );
+        io::stdout().flush()?;
+        return Ok(());
+    }
     let (action, repository) = parse_git_command(&original)?;
 
     let configured = config
@@ -893,7 +961,6 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
         return Err(format!("access denied: {repository}").into());
     }
 
-    let root = repo_root();
     let destination = root.join(format!("{repository}.git"));
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let staging = root.join(format!(".aurcade@staging-{}-{nonce}", process::id()));
@@ -962,6 +1029,26 @@ fn serve(config: &Config, account_name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn parse_delete_command(command: &str) -> Result<Option<String>, Error> {
+    let mut parts = command.split_ascii_whitespace();
+    if parts.next() != Some("delete") {
+        return Ok(None);
+    }
+    let repository = parts
+        .next()
+        .ok_or("usage: delete REPOSITORY --confirm REPOSITORY")?;
+    if parts.next() != Some("--confirm") {
+        return Err("usage: delete REPOSITORY --confirm REPOSITORY".into());
+    }
+    let confirmation = parts
+        .next()
+        .ok_or("usage: delete REPOSITORY --confirm REPOSITORY")?;
+    if parts.next().is_some() || repository != confirmation {
+        return Err("repository confirmation does not match".into());
+    }
+    Ok(Some(normalize_repo(repository)?))
+}
+
 fn parse_git_command(command: &str) -> Result<(&str, String), Error> {
     let (action, argument) = command.split_once(' ').ok_or("invalid Git command")?;
     if !matches!(action, "git-upload-pack" | "git-receive-pack") {
@@ -992,6 +1079,15 @@ mod tests {
         assert!(parse_git_command("git-receive-pack '../pkg.git'").is_err());
         assert!(parse_git_command("sh -c anything").is_err());
         assert!(parse_git_command("git-upload-pack 'pkg.git'; id").is_err());
+        assert_eq!(
+            parse_delete_command("delete alice/pkg --confirm alice/pkg").unwrap(),
+            Some("alice/pkg".into())
+        );
+        assert!(parse_delete_command("delete alice/pkg --confirm alice/other").is_err());
+        assert!(parse_delete_command("delete alice/pkg").is_err());
+        assert_eq!(parse_delete_command("uname -a").unwrap(), None);
+        assert!(normalize_repo(".aurcade-trash/repository").is_err());
+        assert!(normalize_repo(".aurcade-activity/alice").is_err());
     }
 
     #[test]
@@ -1244,6 +1340,56 @@ mod tests {
         configured_repositories(&config, &root, &root, &mut repositories).unwrap();
         assert!(repositories.is_empty());
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn moves_owned_repository_to_trash() {
+        let root = test_directory("delete-repository");
+        let config: Config = toml::from_str(
+            r#"
+                title = "Test Cabinet"
+                clone_prefix = "https://git.example"
+                [[accounts]]
+                name = "alice"
+                ssh_keys = []
+                paths = ["alice/", "team/tools"]
+                [[accounts]]
+                name = "bob"
+                ssh_keys = []
+                paths = ["bob/", "team/tools"]
+            "#,
+        )
+        .unwrap();
+        init_repository(&root, "alice/game").unwrap();
+        init_repository(&root, "team/tools").unwrap();
+        let cache = activity_cache_path(&root, &config.accounts[0]);
+        fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        fs::write(&cache, "cached").unwrap();
+
+        let trash = delete_repository(&config, &config.accounts[0], &root, "alice/game").unwrap();
+        assert!(!root.join("alice/game.git").exists());
+        assert!(root.join(trash).join("HEAD").is_file());
+        assert!(!cache.exists());
+        assert!(
+            !fs::read_to_string(root.join("cgitrc"))
+                .unwrap()
+                .contains("repo.url=alice/game")
+        );
+        assert!(delete_repository(&config, &config.accounts[0], &root, "team/tools").is_err());
+        assert!(root.join("team/tools.git/HEAD").is_file());
+
+        let external = root.with_extension("external.git");
+        let link = root.join("alice/link.git");
+        init_repository(
+            external.parent().unwrap(),
+            external.file_stem().unwrap().to_str().unwrap(),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(&external, &link).unwrap();
+        assert!(delete_repository(&config, &config.accounts[0], &root, "alice/link").is_err());
+        assert!(external.join("HEAD").is_file());
+        fs::remove_dir_all(external).unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
