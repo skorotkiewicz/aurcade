@@ -11,8 +11,11 @@
     <noscript><p>Converse requires JavaScript to run.</p></noscript>
     <script src="/xmpp/converse.min.js"></script>
     <script>
+        const domain = "__AURCADE_DOMAIN__";
         converse.initialize({
-            websocket_url: (location.protocol === "https:" ? "wss://" + location.hostname + ":5281" : "ws://" + location.hostname + ":5280") + "/xmpp-websocket",
+            websocket_url: location.protocol === "https:"
+                ? "wss://" + location.host + "/xmpp-websocket"
+                : "ws://" + domain + ":5280/xmpp-websocket",
             view_mode: "fullscreen",
             allow_registration: false,
             allow_bookmarks: false,

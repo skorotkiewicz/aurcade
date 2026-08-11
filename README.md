@@ -43,6 +43,7 @@ description = "My Git repositories"
 # - [SSH Lobby](ssh://git@localhost:2222) · read-only, no shell
 # - IRC **#aurcade** on port `6697` · [web client](/chat/)
 # - XMPP `alice@chat.localhost` on port `5222` · [web client](/xmpp/)
+# - Email `alice@chat.localhost` · [webmail](/mail/)
 # """
 clone_prefix = "https://localhost:8080 ssh://git@localhost:2222"
 style = "cgit-theme.css"
@@ -144,7 +145,7 @@ Endpoints:
 - IRC TLS: `localhost:6697`
 - Soju IRC TLS: `localhost:6698`
 - XMPP clients: `alice@DOMAIN` on port `5222`
-- XMPP over WebSocket: `wss://localhost:5281/xmpp-websocket`, or `ws://localhost:5280/xmpp-websocket` with `tls = false`
+- Converse XMPP WebSocket: same-origin `/xmpp-websocket` with TLS, or `ws://localhost:5280/xmpp-websocket` with `tls = false`; direct WSS remains on port `5281`
 - XMPP federation: port `5269`
 
 Gamja connects through Soju, so browser and native bouncer clients share one upstream session and persistent history in `soju_data`. Accounts and passwords remain authoritative in `config.toml`; administrators are listed in `soju.toml`.

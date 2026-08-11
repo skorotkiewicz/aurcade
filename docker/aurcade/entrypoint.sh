@@ -18,6 +18,8 @@ fi
 if [ -f /etc/aurcade/irc.toml ] && [ -f /etc/aurcade/xmpp.toml ] && [ -f /etc/aurcade/soju.toml ] && [ -f /etc/aurcade/mail.toml ]; then
     aurcade generate-services
     cp /etc/aurcade/services/gamja-config.json /usr/share/webapps/gamja/config.json
+    domain=$(cat /etc/aurcade/services/maddy-domain)
+    sed -i "s/__AURCADE_DOMAIN__/$domain/g" /usr/share/webapps/converse/index.html
 else
     sed -i '/^# BEGIN chat proxy$/,/^# END chat proxy$/d' /etc/lighttpd/lighttpd.conf
     sed -i '/^# BEGIN mail proxy$/,/^# END mail proxy$/d' /etc/lighttpd/lighttpd.conf

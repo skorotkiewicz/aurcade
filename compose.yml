@@ -24,6 +24,26 @@ services:
   #   volumes:
   #     - ./botPolicy.yaml:/data/cfg/botPolicy.yaml:ro
 
+  setup:
+    image: ghcr.io/skorotkiewicz/aurcade
+    container_name: aurcade-setup
+    build:
+      context: .
+      dockerfile: docker/aurcade/Dockerfile
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["aurcade setup && aurcade generate-services"]
+    volumes:
+      - ./config.toml:/etc/aurcade/config.toml:ro
+      - ./irc.toml:/etc/aurcade/irc.toml:ro
+      - ./xmpp.toml:/etc/aurcade/xmpp.toml:ro
+      - ./soju.toml:/etc/aurcade/soju.toml:ro
+      - ./mail.toml:/etc/aurcade/mail.toml:ro
+      - ./aurcade_data/keys:/etc/aurcade/keys:ro
+      - ./aurcade_data/tls:/etc/aurcade/tls
+      - ./aurcade_data/repositories:/var/lib/aurcade
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services
+
   aurcade:
     image: ghcr.io/skorotkiewicz/aurcade
     container_name: aurcade
@@ -31,6 +51,17 @@ services:
       context: .
       dockerfile: docker/aurcade/Dockerfile
     restart: unless-stopped
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      ergo:
+        condition: service_started
+      prosody:
+        condition: service_started
+      soju:
+        condition: service_started
+      snappymail:
+        condition: service_started
     expose:
       - "9000"
     ports:
@@ -61,8 +92,8 @@ services:
       dockerfile: docker/ergo/Dockerfile
     restart: unless-stopped
     depends_on:
-      aurcade:
-        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
     ports:
       - "6697:6697"
     volumes:
@@ -79,8 +110,8 @@ services:
       dockerfile: docker/prosody/Dockerfile
     restart: unless-stopped
     depends_on:
-      aurcade:
-        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
     ports:
       - "5222:5222"
       - "5269:5269"
@@ -115,8 +146,8 @@ services:
       dockerfile: docker/maddy/Dockerfile
     restart: unless-stopped
     depends_on:
-      aurcade:
-        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
     ports:
       - "25:25"
       - "587:587"

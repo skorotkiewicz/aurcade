@@ -814,7 +814,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         .collect::<Vec<_>>()
         .join(", ");
     let prosody_transport = if config.tls {
-        "certificates = \"/var/run/prosody/tls\"\nhttp_ports = { }\nhttps_ports = { 5281 }\nhttps_interfaces = { \"*\" }\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = { certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }\n"
+        "certificates = \"/var/run/prosody/tls\"\nhttp_ports = { 5282 }\nhttp_interfaces = { \"*\" }\nconsider_websocket_secure = true\nhttps_ports = { 5281 }\nhttps_interfaces = { \"*\" }\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = { certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }\n"
     } else {
         "certificates = \"/var/run/prosody/tls\"\nhttp_ports = { 5280 }\nhttp_interfaces = { \"*\" }\nhttps_ports = { }\nc2s_require_encryption = false\ns2s_require_encryption = false\nallow_unencrypted_plain_auth = true\n"
     };
