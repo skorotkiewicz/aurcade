@@ -49,6 +49,7 @@ services:
       - ./irc.toml:/etc/aurcade/irc.toml:ro
       - ./xmpp.toml:/etc/aurcade/xmpp.toml:ro
       - ./soju.toml:/etc/aurcade/soju.toml:ro
+      - ./mail.toml:/etc/aurcade/mail.toml:ro
       - ./keys:/etc/aurcade/keys:ro
       - ./tls:/etc/aurcade/tls
       - ./repositories:/var/lib/aurcade

@@ -1,0 +1,5 @@
+postmaster = "alice"
+
+[aliases]
+support = "alice"
+admin = "alice"

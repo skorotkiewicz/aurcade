@@ -77,6 +77,14 @@ struct SojuConfig {
     admins: Vec<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MailConfig {
+    postmaster: String,
+    #[serde(default)]
+    aliases: BTreeMap<String, String>,
+}
+
 fn default_irc_network() -> String {
     "AURcade".into()
 }
@@ -669,14 +677,58 @@ fn ensure_tls(config: &Config, domain: &str) -> Result<(PathBuf, PathBuf), Error
     Ok((certificate, private_key))
 }
 
+fn maddy_account_files(
+    config: &Config,
+    mail: &MailConfig,
+    domain: &str,
+) -> Result<(String, String), Error> {
+    let mail_account = |name: &str| {
+        config.accounts.iter().find(|account| {
+            account.password_hash.is_some() && account.name.eq_ignore_ascii_case(name)
+        })
+    };
+    let postmaster = mail_account(&mail.postmaster)
+        .ok_or("mail postmaster must be a password-enabled account")?;
+    let mut users = String::new();
+    for account in &config.accounts {
+        if account.password_hash.is_some() {
+            users.push_str(&format!("{}@{domain}\n", account.name));
+        }
+    }
+    let mut aliases = format!(
+        "postmaster: {}@{domain}\npostmaster@{domain}: {}@{domain}\n",
+        postmaster.name, postmaster.name
+    );
+    let mut names = BTreeSet::new();
+    for (alias, target) in &mail.aliases {
+        let normalized = alias.to_ascii_lowercase();
+        if !valid_account_name(alias)
+            || normalized == "postmaster"
+            || !names.insert(normalized)
+            || config
+                .accounts
+                .iter()
+                .any(|account| account.name.eq_ignore_ascii_case(alias))
+        {
+            return Err(format!("invalid or conflicting mail alias: {alias}").into());
+        }
+        let account = mail_account(target).ok_or_else(|| {
+            format!("mail alias {alias} targets a passwordless or unknown account")
+        })?;
+        aliases.push_str(&format!("{alias}@{domain}: {}@{domain}\n", account.name));
+    }
+    Ok((users, aliases))
+}
+
 fn generate_services(config: &Config) -> Result<(), Error> {
     let domain = config
         .domain
         .as_deref()
-        .ok_or("domain is required for IRC, XMPP, and Soju")?;
+        .ok_or("domain is required for IRC, XMPP, Soju, and Maddy")?;
     let irc: IrcConfig = load_service_config("AURCADE_IRC_CONFIG", "/etc/aurcade/irc.toml")?;
     let xmpp: XmppConfig = load_service_config("AURCADE_XMPP_CONFIG", "/etc/aurcade/xmpp.toml")?;
     let soju: SojuConfig = load_service_config("AURCADE_SOJU_CONFIG", "/etc/aurcade/soju.toml")?;
+    let mail: MailConfig = load_service_config("AURCADE_MAIL_CONFIG", "/etc/aurcade/mail.toml")?;
     if irc.network.is_empty()
         || irc.network.len() > 32
         || !irc
@@ -749,23 +801,14 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         "listen ircs://:6698\nlisten ws+insecure://:8080\nlisten unix+admin:///run/soju/admin\ntls /soju-data/tls/fullchain.pem /soju-data/tls/privkey.pem\nhostname {domain}\ntitle {network}\ndb sqlite3 /soju-data/soju.db\nmessage-store db\nauth http http://aurcade:9000/soju\nenable-user-on-auth true\nhttp-origin {origin} {secure_origin} \"http://localhost:8080\" \"http://127.0.0.1:8080\"\n"
     );
     let mut soju_users = String::new();
-    let mut maddy_users = String::new();
-    let mut maddy_aliases = String::new();
     for account in &config.accounts {
         let admin = soju
             .admins
             .iter()
             .any(|admin| admin.eq_ignore_ascii_case(&account.name));
         soju_users.push_str(&format!("{}\t{}\t{}\n", account.name, admin, irc.network));
-        if account.password_hash.is_some() {
-            let address = format!("{}@{domain}", account.name);
-            if maddy_aliases.is_empty() {
-                maddy_aliases = format!("postmaster: {address}\n");
-            }
-            maddy_users.push_str(&address);
-            maddy_users.push('\n');
-        }
     }
+    let (maddy_users, maddy_aliases) = maddy_account_files(config, &mail, domain)?;
 
     let root = service_root();
     fs::create_dir_all(&root)?;
@@ -1741,6 +1784,53 @@ fn parse_git_command(command: &str) -> Result<(&str, String), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generates_validated_maddy_accounts_and_aliases() {
+        let config: Config = toml::from_str(&format!(
+            r#"
+                title = "Test"
+                clone_prefix = "https://git.example"
+                [[accounts]]
+                name = "alice"
+                password_hash = "{DUMMY_PASSWORD_HASH}"
+                ssh_keys = []
+                paths = []
+                [[accounts]]
+                name = "bob"
+                ssh_keys = []
+                paths = []
+            "#
+        ))
+        .unwrap();
+        let mail: MailConfig = toml::from_str(
+            r#"
+                postmaster = "ALICE"
+                [aliases]
+                support = "alice"
+                admin = "ALICE"
+            "#,
+        )
+        .unwrap();
+
+        let (users, aliases) = maddy_account_files(&config, &mail, "mail.example").unwrap();
+        assert_eq!(users, "alice@mail.example\n");
+        assert_eq!(
+            aliases,
+            "postmaster: alice@mail.example\npostmaster@mail.example: alice@mail.example\nadmin@mail.example: alice@mail.example\nsupport@mail.example: alice@mail.example\n"
+        );
+
+        let invalid = MailConfig {
+            postmaster: "bob".into(),
+            aliases: BTreeMap::new(),
+        };
+        assert!(maddy_account_files(&config, &invalid, "mail.example").is_err());
+        let conflicting = MailConfig {
+            postmaster: "alice".into(),
+            aliases: BTreeMap::from([("alice".into(), "alice".into())]),
+        };
+        assert!(maddy_account_files(&config, &conflicting, "mail.example").is_err());
+    }
 
     #[test]
     fn accepts_git_commands_and_rejects_escapes() {
