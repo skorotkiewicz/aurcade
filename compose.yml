@@ -50,11 +50,11 @@ services:
       - ./xmpp.toml:/etc/aurcade/xmpp.toml:ro
       - ./soju.toml:/etc/aurcade/soju.toml:ro
       - ./mail.toml:/etc/aurcade/mail.toml:ro
-      - ./keys:/etc/aurcade/keys:ro
-      - ./tls:/etc/aurcade/tls
-      - ./repositories:/var/lib/aurcade
-      - ./ssh_host_keys:/etc/ssh/host_keys
-      - ./srv/service_config:/etc/aurcade/services
+      - ./aurcade_data/keys:/etc/aurcade/keys:ro
+      - ./aurcade_data/tls:/etc/aurcade/tls
+      - ./aurcade_data/repositories:/var/lib/aurcade
+      - ./aurcade_data/ssh_host_keys:/etc/ssh/host_keys
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services
 
   ergo:
     image: ghcr.io/skorotkiewicz/aurcade-ergo
@@ -67,9 +67,9 @@ services:
       - "6697:6697"
     volumes:
       - ./config.toml:/etc/aurcade/config.toml:ro
-      - ./tls:/etc/aurcade/tls:ro
-      - ./srv/service_config:/etc/aurcade/services:ro
-      - ./srv/ergo_data:/var/lib/ergo
+      - ./aurcade_data/tls:/etc/aurcade/tls:ro
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
+      - ./aurcade_data/srv/ergo_data:/var/lib/ergo
 
   prosody:
     image: ghcr.io/skorotkiewicz/aurcade-prosody
@@ -83,9 +83,9 @@ services:
       - "5269:5269"
       - "5280:5280"
     volumes:
-      - ./tls:/etc/aurcade/tls:ro
-      - ./srv/service_config:/etc/aurcade/services:ro
-      - ./srv/prosody_data:/var/lib/prosody
+      - ./aurcade_data/tls:/etc/aurcade/tls:ro
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
+      - ./aurcade_data/srv/prosody_data:/var/lib/prosody
 
   soju:
     image: ghcr.io/skorotkiewicz/aurcade-soju
@@ -100,8 +100,8 @@ services:
     ports:
       - "6698:6698"
     volumes:
-      - ./srv/service_config:/etc/aurcade/services:ro
-      - ./srv/soju_data:/soju-data
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
+      - ./aurcade_data/srv/soju_data:/soju-data
 
   maddy:
     image: ghcr.io/skorotkiewicz/aurcade-maddy
@@ -124,8 +124,8 @@ services:
       retries: 12
     volumes:
       - ./config.toml:/etc/aurcade/config.toml:ro
-      - ./srv/service_config:/etc/aurcade/services:ro
-      - ./srv/maddy_data:/data
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
+      - ./aurcade_data/srv/maddy_data:/data
 
 # volumes:
 #   ergo_data:

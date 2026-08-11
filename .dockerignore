@@ -6,4 +6,4 @@ ssh_host_keys
 config.toml
 __pycache__
 keys
-srv
+aurcade_data

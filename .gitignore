@@ -6,4 +6,4 @@
 /tls
 config.toml
 __pycache__
-/srv
+/aurcade_data
