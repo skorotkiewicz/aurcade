@@ -29,7 +29,7 @@ services:
     container_name: aurcade
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/aurcade/Dockerfile
     restart: unless-stopped
     depends_on:
       ergo:
@@ -60,7 +60,7 @@ services:
     container_name: ergo
     build:
       context: .
-      dockerfile: docker/Ergo.Dockerfile
+      dockerfile: docker/ergo/Dockerfile
     restart: unless-stopped
     ports:
       - "6697:6697"
@@ -75,7 +75,7 @@ services:
     container_name: prosody
     build:
       context: .
-      dockerfile: docker/Prosody.Dockerfile
+      dockerfile: docker/prosody/Dockerfile
     restart: unless-stopped
     ports:
       - "5222:5222"
@@ -91,7 +91,7 @@ services:
     container_name: soju
     build:
       context: .
-      dockerfile: docker/Soju.Dockerfile
+      dockerfile: docker/soju/Dockerfile
     restart: unless-stopped
     depends_on:
       ergo:
@@ -103,14 +103,15 @@ services:
       - ./srv/soju_data:/soju-data
 
   maddy:
-    image: ghcr.io/foxcpp/maddy:0.9.5@sha256:de42151adff6388edb5e4ee88f60334fa1ab85e309485193ecb1c2db20203315
+    image: ghcr.io/skorotkiewicz/aurcade-maddy
     container_name: maddy
+    build:
+      context: .
+      dockerfile: docker/maddy/Dockerfile
     restart: unless-stopped
     depends_on:
       aurcade:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "/etc/maddy/entrypoint.sh"]
-    command: []
     ports:
       - "25:25"
       - "587:587"
@@ -122,8 +123,6 @@ services:
       retries: 12
     volumes:
       - ./config.toml:/etc/aurcade/config.toml:ro
-      - ./docker/maddy.conf:/etc/maddy/maddy.conf:ro
-      - ./docker/maddy-entrypoint.sh:/etc/maddy/entrypoint.sh:ro
       - ./srv/service_config:/etc/aurcade/services:ro
       - ./srv/maddy_data:/data
 

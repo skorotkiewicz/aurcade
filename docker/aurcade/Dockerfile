@@ -15,7 +15,7 @@ RUN apk add --no-cache build-base openssl-dev wget xz zlib-dev \
     && tar -xf "git-${GIT_VERSION}.tar.gz" \
     && rm -rf "cgit-${CGIT_VERSION}/git" \
     && mv "git-${GIT_VERSION}" "cgit-${CGIT_VERSION}/git"
-COPY docker/cgit-commit-signatures.patch /tmp/cgit-commit-signatures.patch
+COPY docker/aurcade/cgit-commit-signatures.patch /tmp/cgit-commit-signatures.patch
 RUN cd "cgit-${CGIT_VERSION}" \
     && patch -p1 < /tmp/cgit-commit-signatures.patch \
     && make -j"$(nproc)" NO_LUA=1 NO_ICONV=YesPlease NO_GETTEXT=YesPlease \
@@ -60,15 +60,15 @@ COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/filters/html-converters/ /usr/l
 COPY --from=rust-build /src/target/release/aurcade /usr/local/bin/aurcade
 COPY --from=gamja-build /src/dist/ /usr/share/webapps/gamja/
 COPY --from=converse-build /src/dist/ /usr/share/webapps/converse/
-COPY docker/converse-index.html /usr/share/webapps/converse/index.html
-COPY docker/lighttpd.conf /etc/lighttpd/lighttpd.conf
-COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
-COPY docker/cgit-header.css /tmp/cgit-header.css
-COPY docker/aurcade-logo.svg /usr/share/webapps/cgit/aurcade-logo.svg
-COPY docker/aurcade-favicon.svg /usr/share/webapps/cgit/aurcade-favicon.svg
-COPY docker/about-filter.py /usr/local/bin/aurcade-about-filter
-COPY docker/gpgv-wrapper.sh /usr/local/bin/aurcade-gpgv
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint
+COPY docker/aurcade/converse-index.html /usr/share/webapps/converse/index.html
+COPY docker/aurcade/lighttpd.conf /etc/lighttpd/lighttpd.conf
+COPY docker/aurcade/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
+COPY docker/aurcade/cgit-header.css /tmp/cgit-header.css
+COPY docker/aurcade/aurcade-logo.svg /usr/share/webapps/cgit/aurcade-logo.svg
+COPY docker/aurcade/aurcade-favicon.svg /usr/share/webapps/cgit/aurcade-favicon.svg
+COPY docker/aurcade/about-filter.py /usr/local/bin/aurcade-about-filter
+COPY docker/aurcade/gpgv-wrapper.sh /usr/local/bin/aurcade-gpgv
+COPY docker/aurcade/entrypoint.sh /usr/local/bin/entrypoint
 RUN passwd -d git \
     && sed -i 's/ -X / -O xhtml /' /usr/lib/cgit/filters/syntax-highlighting.sh \
     && highlight -O xhtml --style-outfile=stdout --print-style >> /usr/share/webapps/cgit/cgit.css \
