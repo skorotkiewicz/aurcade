@@ -53,10 +53,10 @@ services:
       - ./tls:/etc/aurcade/tls
       - ./repositories:/var/lib/aurcade
       - ./ssh_host_keys:/etc/ssh/host_keys
-      - service_config:/etc/aurcade/services
+      - ./srv/service_config:/etc/aurcade/services
 
   ergo:
-    image: aurcade-ergo
+    image: ghcr.io/skorotkiewicz/aurcade-ergo
     container_name: ergo
     build:
       context: .
@@ -67,11 +67,11 @@ services:
     volumes:
       - ./config.toml:/etc/aurcade/config.toml:ro
       - ./tls:/etc/aurcade/tls:ro
-      - service_config:/etc/aurcade/services:ro
-      - ergo_data:/var/lib/ergo
+      - ./srv/service_config:/etc/aurcade/services:ro
+      - ./srv/ergo_data:/var/lib/ergo
 
   prosody:
-    image: aurcade-prosody
+    image: ghcr.io/skorotkiewicz/aurcade-prosody
     container_name: prosody
     build:
       context: .
@@ -83,11 +83,11 @@ services:
       - "5280:5280"
     volumes:
       - ./tls:/etc/aurcade/tls:ro
-      - service_config:/etc/aurcade/services:ro
-      - prosody_data:/var/lib/prosody
+      - ./srv/service_config:/etc/aurcade/services:ro
+      - ./srv/prosody_data:/var/lib/prosody
 
   soju:
-    image: aurcade-soju
+    image: ghcr.io/skorotkiewicz/aurcade-soju
     container_name: soju
     build:
       context: .
@@ -99,11 +99,11 @@ services:
     ports:
       - "6698:6698"
     volumes:
-      - service_config:/etc/aurcade/services:ro
-      - soju_data:/soju-data
+      - ./srv/service_config:/etc/aurcade/services:ro
+      - ./srv/soju_data:/soju-data
 
-volumes:
-  ergo_data:
-  prosody_data:
-  soju_data:
-  service_config:
+# volumes:
+#   ergo_data:
+#   prosody_data:
+#   soju_data:
+#   service_config:

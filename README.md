@@ -141,7 +141,7 @@ Endpoints:
 - IRC TLS: `localhost:6697`
 - Soju IRC TLS: `localhost:6698`
 - XMPP clients: `alice@DOMAIN` on port `5222`
-- XMPP over WebSocket: `/xmpp-websocket`
+- XMPP over WebSocket: `ws://localhost:5280/xmpp-websocket`
 - XMPP federation: port `5269`
 
 Gamja connects through Soju, so browser and native bouncer clients share one upstream session and persistent history in `soju_data`. Accounts and passwords remain authoritative in `config.toml`; administrators are listed in `soju.toml`.
