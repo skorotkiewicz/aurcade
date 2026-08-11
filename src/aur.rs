@@ -216,6 +216,25 @@ fn repository_maintainer(config: &Config, repository: &str) -> Option<String> {
     (owners.len() == 1).then(|| owners[0].to_owned())
 }
 
+fn read_aur_repository(
+    config: &Config,
+    root: &Path,
+    repository: &str,
+) -> Result<Option<Vec<AurPackage>>, Error> {
+    let path = root.join(format!("{repository}.git"));
+    let Some(srcinfo) = git_file(&path, ".SRCINFO", 1024 * 1024)? else {
+        return Ok(None);
+    };
+    let srcinfo = std::str::from_utf8(&srcinfo)
+        .map_err(|_| format!("{repository}: .SRCINFO must be UTF-8"))?;
+    Ok(Some(parse_srcinfo(
+        srcinfo,
+        repository,
+        repository_maintainer(config, repository),
+        repository_timestamp(&path)?,
+    )?))
+}
+
 fn aur_index(config: &Config, root: &Path) -> Result<Vec<AurPackage>, Error> {
     let mut repositories = BTreeSet::new();
     configured_repositories(config, root, root, &mut repositories)?;
@@ -230,32 +249,34 @@ fn aur_index(config: &Config, root: &Path) -> Result<Vec<AurPackage>, Error> {
     let mut package_bases = BTreeMap::<String, String>::new();
     let mut package_names = BTreeSet::new();
     for repository in repositories {
-        let path = root.join(format!("{repository}.git"));
-        let Some(srcinfo) = git_file(&path, ".SRCINFO", 1024 * 1024)? else {
-            continue;
+        let parsed = match read_aur_repository(config, root, &repository) {
+            Ok(Some(packages)) => packages,
+            Ok(None) => continue,
+            Err(error) => {
+                eprintln!("aurcade: skipping AUR repository {repository}: {error}");
+                continue;
+            }
         };
-        let srcinfo = std::str::from_utf8(&srcinfo)
-            .map_err(|_| format!("{repository}: .SRCINFO must be UTF-8"))?;
-        let parsed = parse_srcinfo(
-            srcinfo,
-            &repository,
-            repository_maintainer(config, &repository),
-            repository_timestamp(&path)?,
-        )?;
         let package_base = &parsed[0].package_base;
-        match package_bases.insert(package_base.clone(), repository.clone()) {
-            Some(previous) if previous != repository => {
-                return Err(format!(
-                    "duplicate AUR package base {package_base}: {previous} and {repository}"
-                )
-                .into());
-            }
-            _ => {}
+        if let Some(previous) = package_bases.get(package_base) {
+            eprintln!(
+                "aurcade: skipping AUR repository {repository}: duplicate package base {package_base} in {previous}"
+            );
+            continue;
         }
+        if let Some(package) = parsed
+            .iter()
+            .find(|package| package_names.contains(&package.name))
+        {
+            eprintln!(
+                "aurcade: skipping AUR repository {repository}: duplicate package name {}",
+                package.name
+            );
+            continue;
+        }
+        package_bases.insert(package_base.clone(), repository.clone());
         for package in parsed {
-            if !package_names.insert(package.name.clone()) {
-                return Err(format!("duplicate AUR package name: {}", package.name).into());
-            }
+            package_names.insert(package.name.clone());
             packages.push(package);
         }
     }
@@ -763,6 +784,13 @@ mod tests {
             "--bare",
             source.to_str().unwrap(),
             root.join("alice/aur/spark.git").to_str().unwrap(),
+        ]);
+        git(&[
+            "clone",
+            "--quiet",
+            "--bare",
+            source.to_str().unwrap(),
+            root.join("alice/aur/wrong-name.git").to_str().unwrap(),
         ]);
 
         let config: Config = toml::from_str(
