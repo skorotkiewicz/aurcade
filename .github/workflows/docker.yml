@@ -96,3 +96,72 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-snappymail
           subject-digest: ${{ steps.push-snappymail.outputs.digest }}
           push-to-registry: true
+
+      - name: Extract metadata for Ergo
+        id: meta-ergo
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ergo
+
+      - name: Build and push Ergo image
+        id: push-ergo
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          file: ./docker/ergo/Dockerfile
+          push: true
+          tags: ${{ steps.meta-ergo.outputs.tags }}
+          labels: ${{ steps.meta-ergo.outputs.labels }}
+
+      - name: Generate Ergo artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ergo
+          subject-digest: ${{ steps.push-ergo.outputs.digest }}
+          push-to-registry: true
+
+      - name: Extract metadata for Prosody
+        id: meta-prosody
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-prosody
+
+      - name: Build and push Prosody image
+        id: push-prosody
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          file: ./docker/prosody/Dockerfile
+          push: true
+          tags: ${{ steps.meta-prosody.outputs.tags }}
+          labels: ${{ steps.meta-prosody.outputs.labels }}
+
+      - name: Generate Prosody artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-prosody
+          subject-digest: ${{ steps.push-prosody.outputs.digest }}
+          push-to-registry: true
+
+      - name: Extract metadata for Soju
+        id: meta-soju
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-soju
+
+      - name: Build and push Soju image
+        id: push-soju
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          file: ./docker/soju/Dockerfile
+          push: true
+          tags: ${{ steps.meta-soju.outputs.tags }}
+          labels: ${{ steps.meta-soju.outputs.labels }}
+
+      - name: Generate Soju artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-soju
+          subject-digest: ${{ steps.push-soju.outputs.digest }}
+          push-to-registry: true

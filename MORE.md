@@ -196,7 +196,7 @@ You can also mount public-key files and reference them from `config.toml`:
 gpg_key_files = ["keys/alice.asc"]
 ```
 
-Put these files in `aurcade_data/keys`. Each configured path must start with `keys/`.
+Put these files in `keys/`. Each configured path must start with `keys/`.
 
 Invalid or missing GPG keys cause a startup warning. They do not stop AURcade.
 

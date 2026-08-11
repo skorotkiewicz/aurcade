@@ -39,7 +39,7 @@ services:
       - ./xmpp.toml:/etc/aurcade/xmpp.toml:ro
       - ./soju.toml:/etc/aurcade/soju.toml:ro
       - ./mail.toml:/etc/aurcade/mail.toml:ro
-      - ./aurcade_data/keys:/etc/aurcade/keys:ro
+      - ./keys:/etc/aurcade/keys:ro
       - ./aurcade_data/tls:/etc/aurcade/tls
       - ./aurcade_data/repositories:/var/lib/aurcade
       - ./aurcade_data/srv/service_config:/etc/aurcade/services
@@ -78,7 +78,7 @@ services:
       - ./xmpp.toml:/etc/aurcade/xmpp.toml:ro
       - ./soju.toml:/etc/aurcade/soju.toml:ro
       - ./mail.toml:/etc/aurcade/mail.toml:ro
-      - ./aurcade_data/keys:/etc/aurcade/keys:ro
+      - ./keys:/etc/aurcade/keys:ro
       - ./aurcade_data/tls:/etc/aurcade/tls
       - ./aurcade_data/repositories:/var/lib/aurcade
       - ./aurcade_data/ssh_host_keys:/etc/ssh/host_keys
