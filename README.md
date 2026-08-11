@@ -13,6 +13,7 @@ AURcade puts Git, IRC, XMPP, and email in one Docker Compose stack. No quarters 
 | | What you get |
 | --- | --- |
 | **Git** | cgit, SSH pushes, first-push repository creation, shared access, signed commits, an SSH lobby, and recoverable deletion |
+| **AUR** | A private source-package server for `yay` and `paru`, backed by normal Git repositories |
 | **IRC** | Ergo, a persistent Soju bouncer, and the Gamja web client |
 | **XMPP** | Prosody, federation, native clients, WebSockets, and the Converse web client |
 | **Mail** | Maddy SMTP, submission, IMAP, aliases, DKIM, and SnappyMail webmail |

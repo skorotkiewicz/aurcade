@@ -1,7 +1,10 @@
+mod aur;
+
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
+use aur::handle_connection as handle_aur_connection;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use pulldown_cmark::{Event, Options, Parser, html};
 use serde::{Deserialize, Serialize};
@@ -35,6 +38,8 @@ struct Config {
     description: String,
     #[serde(default)]
     markdown_description: Option<String>,
+    #[serde(default)]
+    aur_paths: Vec<String>,
     clone_prefix: String,
     style: Option<String>,
     logo: Option<String>,
@@ -270,15 +275,12 @@ fn handle_auth_connection(
     let mut request = String::new();
     reader.read_line(&mut request)?;
     let mut request = request.split_ascii_whitespace();
-    let method = request.next();
-    let path = request.next();
-    if method != Some("POST") || !matches!(path, Some("/verify" | "/exists" | "/soju")) {
-        auth_response(stream, "404 Not Found")?;
-        return Ok(());
-    }
+    let method = request.next().unwrap_or("").to_owned();
+    let path = request.next().unwrap_or("").to_owned();
 
     let mut account_name = None;
     let mut authorization = None;
+    let mut content_type = None;
     let mut content_length = 0;
     let mut header_bytes = 0;
     loop {
@@ -296,16 +298,32 @@ fn handle_auth_connection(
             match name.to_ascii_lowercase().as_str() {
                 "x-aurcade-account" => account_name = Some(value.trim().to_owned()),
                 "authorization" => authorization = Some(value.trim().to_owned()),
+                "content-type" => content_type = Some(value.trim().to_owned()),
                 "content-length" => content_length = value.trim().parse().unwrap_or(usize::MAX),
                 _ => {}
             }
         }
     }
+    if handle_aur_connection(
+        config,
+        &method,
+        &path,
+        content_type.as_deref(),
+        content_length,
+        &mut reader,
+        stream,
+    )? {
+        return Ok(());
+    }
+    if method != "POST" || !matches!(path.as_str(), "/verify" | "/exists" | "/soju") {
+        auth_response(stream, "404 Not Found")?;
+        return Ok(());
+    }
     if content_length > 4096 {
         auth_response(stream, "400 Bad Request")?;
         return Ok(());
     }
-    if path == Some("/soju") {
+    if path == "/soju" {
         let Some((account_name, password)) = authorization
             .as_deref()
             .and_then(basic_credentials)
@@ -336,7 +354,7 @@ fn handle_auth_connection(
         .accounts
         .iter()
         .find(|account| account.name.eq_ignore_ascii_case(&account_name));
-    let success = if path == Some("/exists") {
+    let success = if path == "/exists" {
         account.is_some_and(|account| account.password_hash.is_some())
     } else {
         let mut password = vec![0; content_length];
@@ -370,13 +388,13 @@ const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$Codfcvzi3WvRDi
 
 fn auth_server(config: &Config) -> Result<(), Error> {
     let listener = TcpListener::bind("0.0.0.0:9000")?;
-    // ponytail: sequential auth is enough for a personal server; thread it if login load grows.
+    // ponytail: one HTTP worker is enough for a personal server; add threads if clones delay logins.
     for stream in listener.incoming() {
         let mut stream = stream?;
         stream.set_read_timeout(Some(Duration::from_secs(10)))?;
         stream.set_write_timeout(Some(Duration::from_secs(10)))?;
         if let Err(error) = handle_auth_connection(config, DUMMY_PASSWORD_HASH, &mut stream) {
-            eprintln!("aurcade: authentication request failed: {error}");
+            eprintln!("aurcade: HTTP request failed: {error}");
         }
     }
     Ok(())
@@ -513,6 +531,10 @@ fn validate_config(config: &Config) -> Result<(), Error> {
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
     }) {
         return Err("favicon must be an image filename".into());
+    }
+
+    for path in &config.aur_paths {
+        normalize_repo(path)?;
     }
 
     let mut names = HashSet::new();
@@ -1114,7 +1136,9 @@ fn configured_repositories(
     }
     Ok(())
 }
-
+//
+//
+//
 fn cgit_style(config: &Config) -> &str {
     config.style.as_deref().unwrap_or("cgit.css")
 }
@@ -1979,6 +2003,12 @@ mod tests {
         )
         .unwrap();
         assert!(config.tls);
+        assert!(config.aur_paths.is_empty());
+        config.aur_paths = vec!["aur/".into(), "alice/aur/".into()];
+        assert!(validate_config(&config).is_ok());
+        config.aur_paths = vec!["../outside".into()];
+        assert!(validate_config(&config).is_err());
+        config.aur_paths = vec![];
         assert!(validate_config(&config).is_ok());
         config.tls = false;
         assert!(validate_config(&config).is_ok());
@@ -2129,6 +2159,7 @@ mod tests {
             tls_private_key: None,
             description: String::new(),
             markdown_description: None,
+            aur_paths: vec![],
             clone_prefix: "http://localhost".into(),
             style: None,
             logo: None,
@@ -2298,6 +2329,7 @@ Features:
             tls_private_key: None,
             description: String::new(),
             markdown_description: None,
+            aur_paths: vec![],
             clone_prefix: "http://localhost".into(),
             style: None,
             logo: None,

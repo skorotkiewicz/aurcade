@@ -20,6 +20,7 @@ AURcade is a small self-hosted Git, chat, and mail server. One TOML file control
 - Recoverable repository deletion
 - Per-repository `.aurcade` descriptions
 - Optional safe Markdown header on every cgit page
+- AUR-compatible RPC, package lists, raw PKGBUILDs, and smart HTTP clones
 
 ### Chat
 
@@ -106,6 +107,7 @@ markdown_description = """
 - [XMPP](/xmpp/)
 - [Webmail](/mail/)
 """
+aur_paths = ["alice/aur/"]
 clone_prefix = "https://example.com:8080 ssh://git@example.com:2222"
 style = "cgit-theme.css"
 logo = "aurcade-logo.svg"
@@ -175,6 +177,47 @@ A small repository with a useful description.
 ```
 
 AURcade refreshes metadata after each push.
+
+## AUR server
+
+Set one or more repository rules in `config.toml`:
+
+```toml
+aur_paths = ["aur/", "alice/aur/"]
+```
+
+Each package repository needs committed `PKGBUILD` and `.SRCINFO` files. The repository name must match `pkgbase`.
+
+Generate `.SRCINFO` before each package push:
+
+```sh
+makepkg --printsrcinfo > .SRCINFO
+git add PKGBUILD .SRCINFO
+git commit -m "Update package"
+git push
+```
+
+Configure `yay` for one invocation:
+
+```sh
+yay --aururl https://HOST:8080/aur \
+    --aurrpcurl https://HOST:8080/aur/rpc \
+    -S PACKAGE
+```
+
+Configure `paru` for one invocation:
+
+```sh
+paru --aururl https://HOST:8080/aur \
+     --aurrpcurl https://HOST:8080/aur/rpc \
+     -S PACKAGE
+```
+
+Use a trusted TLS certificate for clients. With `tls = false`, replace `https` with `http` on a trusted network.
+
+Package names and package-base names must be unique across all `aur_paths`. These options replace the official AUR for that invocation.
+
+AURcade reads committed package files but never executes `PKGBUILD`. The helper reviews and builds packages locally.
 
 ## Signed commits
 

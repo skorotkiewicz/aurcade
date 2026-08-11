@@ -12,6 +12,10 @@ description = "a fast webinterface for the git dscm"
 #
 # A **homebrew**-style package archive for the AUR.
 # """
+# Optional repository rules exposed as an AUR server under /aur/.
+aur_paths = ["alice/aur/"]
+# A trailing slash grants the namespace and allows first-push creation below it.
+paths = ["alice/", "alice/"]
 clone_prefix = "https://localhost:8080 ssh://git@localhost:2222"
 # Optional CSS filename; defaults to cgit.css.
 # style = "cgit-theme.css"

@@ -49,7 +49,7 @@ RUN cargo build --locked --release
 FROM alpine:3.21
 ARG CGIT_VERSION
 ENV CGIT_CONFIG=/var/lib/aurcade/cgitrc
-RUN apk add --no-cache git gpg gpg-agent gpgv highlight lighttpd mailcap openssh-server openssl py3-markdown py3-pygments \
+RUN apk add --no-cache git git-daemon gpg gpg-agent gpgv highlight lighttpd mailcap openssh-server openssl py3-markdown py3-pygments su-exec \
     && adduser -D -h /home/git git \
     && install -d -o git -g git /home/git/.ssh /var/lib/aurcade /etc/aurcade
 COPY --from=cgit-build /src/cgit-${CGIT_VERSION}/cgit /usr/share/webapps/cgit/cgit.cgi
