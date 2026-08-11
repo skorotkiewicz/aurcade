@@ -33,7 +33,7 @@ A small Git repository host for static accounts.
    docker compose up --build -d
    ```
 
-4. Open <http://localhost:8080>.
+4. Open <https://localhost:8080>.
 
 The SSH service uses port `2222` on the host.
 
@@ -51,7 +51,7 @@ Create `config.toml` with:
 ```toml
 title = "AURcade"
 description = "My Git repositories"
-clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
+clone_prefix = "https://localhost:8080 ssh://git@localhost:2222"
 style = "cgit-theme.css"
 logo = "aurcade-logo.svg"
 favicon = "aurcade-favicon.svg"
@@ -70,10 +70,11 @@ Run the published image:
 docker run -d \
   --name aurcade \
   --restart unless-stopped \
-  -p 8080:80 \
+  -p 8080:443 \
   -p 2222:22 \
   -v "$PWD/config.toml:/etc/aurcade/config.toml:ro" \
   -v "$PWD/keys:/etc/aurcade/keys:ro" \
+  -v "$PWD/tls:/etc/aurcade/tls" \
   -v aurcade-repositories:/var/lib/aurcade \
   -v aurcade-ssh-host-keys:/etc/ssh/host_keys \
   ghcr.io/skorotkiewicz/aurcade

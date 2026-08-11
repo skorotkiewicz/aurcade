@@ -773,8 +773,8 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         .to_str()
         .ok_or("TLS private key path is not UTF-8")?;
     let network = serde_json::to_string(&irc.network)?;
-    let origin = serde_json::to_string(&format!("http://{domain}:8080"))?;
-    let secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
+    let secure_origin = serde_json::to_string(&format!("https://{domain}:8080"))?;
+    let standard_secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
     let ergo = format!(
         "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6667\":\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
     );
@@ -794,11 +794,11 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         .collect::<Vec<_>>()
         .join(", ");
     let prosody = format!(
-        "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\ncertificates = \"/var/run/prosody/tls\"\nhttp_ports = {{ 5280 }}\nhttp_interfaces = {{ \"*\" }}\nhttps_ports = {{ }}\nconsider_websocket_secure = true\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; \"websocket\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
+        "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\ncertificates = \"/var/run/prosody/tls\"\nhttp_ports = {{ }}\nhttps_ports = {{ 5281 }}\nhttps_interfaces = {{ \"*\" }}\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; \"websocket\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
     );
 
     let soju_config = format!(
-        "listen ircs://:6698\nlisten ws+insecure://:8080\nlisten unix+admin:///run/soju/admin\ntls /soju-data/tls/fullchain.pem /soju-data/tls/privkey.pem\nhostname {domain}\ntitle {network}\ndb sqlite3 /soju-data/soju.db\nmessage-store db\nauth http http://aurcade:9000/soju\nenable-user-on-auth true\nhttp-origin {origin} {secure_origin} \"http://localhost:8080\" \"http://127.0.0.1:8080\"\n"
+        "listen ircs://:6698\nlisten ws+insecure://:8080\nlisten unix+admin:///run/soju/admin\ntls /soju-data/tls/fullchain.pem /soju-data/tls/privkey.pem\nhostname {domain}\ntitle {network}\ndb sqlite3 /soju-data/soju.db\nmessage-store db\nauth http http://aurcade:9000/soju\nenable-user-on-auth true\nhttp-origin {secure_origin} {standard_secure_origin} \"https://localhost:8080\" \"https://127.0.0.1:8080\"\n"
     );
     let mut soju_users = String::new();
     for account in &config.accounts {
@@ -864,6 +864,21 @@ fn init_repository(root: &Path, repository: &str) -> Result<(), Error> {
 fn setup(config: &Config) -> Result<(), Error> {
     let root = repo_root();
     fs::create_dir_all(&root)?;
+
+    let (certificate, private_key) =
+        ensure_tls(config, config.domain.as_deref().unwrap_or("localhost"))?;
+    let services = service_root();
+    fs::create_dir_all(&services)?;
+    atomic_write_bytes(&services.join("web-fullchain.pem"), &fs::read(certificate)?)?;
+    atomic_write_bytes(&services.join("web-privkey.pem"), &fs::read(private_key)?)?;
+    fs::set_permissions(
+        services.join("web-privkey.pem"),
+        fs::Permissions::from_mode(0o600),
+    )?;
+
+    // # Optional; omit both to generate persistent self-signed TLS files.
+    # tls_certificate = "tls/fullchain.pem"
+    # tls_private_key = "tls/privkey.pem"
 
     let paths: BTreeSet<String> = config
         .accounts

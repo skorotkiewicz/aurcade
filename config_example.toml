@@ -10,7 +10,7 @@ description = "a fast webinterface for the git dscm"
 #
 # A **homebrew**-style package archive for the AUR.
 # """
-clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
+clone_prefix = "https://localhost:8080 ssh://git@localhost:2222"
 # Optional CSS filename; defaults to cgit.css.
 # style = "cgit-theme.css"
 # Optional image filename; defaults to cgit.png.

@@ -42,7 +42,7 @@ description = "My Git repositories"
 # - IRC **#aurcade** on port `6697` · [web client](/chat/)
 # - XMPP `alice@chat.localhost` on port `5222` · [web client](/xmpp/)
 # """
-clone_prefix = "http://localhost:8080 ssh://git@localhost:2222"
+clone_prefix = "https://localhost:8080 ssh://git@localhost:2222"
 style = "cgit-theme.css"
 logo = "aurcade-logo.svg"
 favicon = "aurcade-favicon.svg"
@@ -69,10 +69,11 @@ These commands print TOML without modifying `config.toml`.
 docker run -d \
   --name aurcade \
   --restart unless-stopped \
-  -p 8080:80 \
+  -p 8080:443 \
   -p 2222:22 \
   -v "$PWD/config.toml:/etc/aurcade/config.toml:ro" \
   -v "$PWD/keys:/etc/aurcade/keys:ro" \
+  -v "$PWD/tls:/etc/aurcade/tls" \
   -v ./repositories:/var/lib/aurcade \
   -v ./ssh-host-keys:/etc/ssh/host_keys \
   ghcr.io/skorotkiewicz/aurcade:latest
@@ -84,7 +85,7 @@ With Compose:
 docker compose up --build -d
 ```
 
-Open <http://localhost:8080>. The optional commented Anubis service can protect HTTP while SSH remains direct. After account, domain, or service configuration changes, run `docker compose up -d --force-recreate`.
+Open <https://localhost:8080>. The generated certificate is self-signed unless configured otherwise, so browsers may require confirmation. After account, domain, or service configuration changes, run `docker compose up -d --force-recreate`.
 
 ## Access
 
@@ -136,17 +137,17 @@ admins = ["alice"]
 
 Endpoints:
 
-- Gamja: <http://localhost:8080/chat/>
-- Converse.js XMPP: <http://localhost:8080/xmpp/>
+- Gamja: <https://localhost:8080/chat/>
+- Converse.js XMPP: <https://localhost:8080/xmpp/>
 - IRC TLS: `localhost:6697`
 - Soju IRC TLS: `localhost:6698`
 - XMPP clients: `alice@DOMAIN` on port `5222`
-- XMPP over WebSocket: `ws://localhost:5280/xmpp-websocket`
+- XMPP over WebSocket: `wss://localhost:5281/xmpp-websocket`
 - XMPP federation: port `5269`
 
 Gamja connects through Soju, so browser and native bouncer clients share one upstream session and persistent history in `soju_data`. Accounts and passwords remain authoritative in `config.toml`; administrators are listed in `soju.toml`.
 
-When both global TLS paths are omitted, AURcade generates a persistent self-signed certificate in `./tls`. Configure both paths to use a CA-issued certificate instead:
+When both global TLS paths are omitted, AURcade generates a persistent self-signed certificate in `./aurcade_data/tls`. Configure both paths to use a CA-issued certificate instead:
 
 ```toml
 tls_certificate = "tls/fullchain.pem"
@@ -171,10 +172,11 @@ Alias targets must be password-enabled account names. Use the full address, such
 - Incoming SMTP: port `25` with STARTTLS when available
 - Authenticated submission: port `587` with STARTTLS required before authentication
 - IMAP: port `993` with TLS
+- Webmail: <https://localhost:8080/mail/>
 
-Mail, queues, and generated DKIM keys persist in `./srv/maddy_data`. The configured postmaster receives mail addressed to `postmaster`. Restart the stack after changing accounts or `mail.toml`; removed accounts retain their stored mail.
+Mail, queues, and generated DKIM keys persist in `./aurcade_data/srv/maddy_data`; SnappyMail state persists in `./aurcade_data/srv/snappymail_data`. The configured postmaster receives mail addressed to `postmaster`. Restart the stack after changing accounts or `mail.toml`; removed accounts retain their stored mail.
 
-Before using public email, configure an `A`/`AAAA` record, an `MX` record pointing at `DOMAIN`, matching reverse DNS, SPF, and DMARC. After Maddy starts, publish the value from `./srv/maddy_data/dkim_keys/DOMAIN_default.dns` as the TXT record `default._domainkey.DOMAIN`.
+Before using public email, configure an `A`/`AAAA` record, an `MX` record pointing at `DOMAIN`, matching reverse DNS, SPF, and DMARC. After Maddy starts, publish the value from `./aurcade_data/srv/maddy_data/dkim_keys/DOMAIN_default.dns` as the TXT record `default._domainkey.DOMAIN`.
 
 ## Signed commits
 

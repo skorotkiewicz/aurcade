@@ -76,6 +76,6 @@ RUN passwd -d git \
     && cat /tmp/cgit-header.css >> /usr/share/webapps/cgit/cgit-theme.css \
     && chmod +x /usr/lib/cgit/filters/syntax-highlighting.sh /usr/local/bin/aurcade-about-filter /usr/local/bin/aurcade-gpgv /usr/local/bin/entrypoint \
     && printf '\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers git\n' >> /etc/ssh/sshd_config
-EXPOSE 22 80
+EXPOSE 22 80 443
 VOLUME ["/var/lib/aurcade"]
 ENTRYPOINT ["/usr/local/bin/entrypoint"]

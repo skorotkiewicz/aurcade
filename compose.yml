@@ -34,10 +34,14 @@ services:
     depends_on:
       ergo:
         condition: service_started
+      soju:
+        condition: service_started
+      snappymail:
+        condition: service_started
     expose:
       - "9000"
     ports:
-      - "8080:80"
+      - "8080:443"
       - "2222:22"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/cgit.css"]
@@ -81,7 +85,7 @@ services:
     ports:
       - "5222:5222"
       - "5269:5269"
-      - "5280:5280"
+      - "5281:5281"
     volumes:
       - ./aurcade_data/tls:/etc/aurcade/tls:ro
       - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
@@ -110,9 +114,6 @@ services:
       context: .
       dockerfile: docker/maddy/Dockerfile
     restart: unless-stopped
-    depends_on:
-      aurcade:
-        condition: service_healthy
     ports:
       - "25:25"
       - "587:587"
@@ -126,6 +127,29 @@ services:
       - ./config.toml:/etc/aurcade/config.toml:ro
       - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
       - ./aurcade_data/srv/maddy_data:/data
+
+  snappymail:
+    image: ghcr.io/skorotkiewicz/aurcade-snappymail
+    container_name: snappymail
+    build:
+      context: .
+      dockerfile: docker/snappymail/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      maddy:
+        condition: service_started
+    expose:
+      - "8888"
+    environment:
+      SECURE_COOKIES: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8888/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
+      - ./aurcade_data/srv/snappymail_data:/var/lib/snappymail
 
 # volumes:
 #   ergo_data:
