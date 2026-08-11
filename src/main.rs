@@ -25,6 +25,8 @@ struct Config {
     title: String,
     #[serde(default)]
     domain: Option<String>,
+    #[serde(default = "default_tls")]
+    tls: bool,
     #[serde(default)]
     tls_certificate: Option<String>,
     #[serde(default)]
@@ -83,6 +85,10 @@ struct MailConfig {
     postmaster: String,
     #[serde(default)]
     aliases: BTreeMap<String, String>,
+}
+
+fn default_tls() -> bool {
+    true
 }
 
 fn default_irc_network() -> String {
@@ -465,6 +471,9 @@ fn validate_config(config: &Config) -> Result<(), Error> {
     if config.tls_certificate.is_some() != config.tls_private_key.is_some() {
         return Err("tls_certificate and tls_private_key must be configured together".into());
     }
+    if !config.tls && config.tls_certificate.is_some() {
+        return Err("tls_certificate and tls_private_key require tls = true".into());
+    }
     if let Some(filename) = &config.tls_certificate {
         tls_path(filename)?;
     }
@@ -765,18 +774,29 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         }
     }
 
-    let (certificate, private_key) = ensure_tls(config, domain)?;
-    let certificate = certificate
-        .to_str()
-        .ok_or("TLS certificate path is not UTF-8")?;
-    let private_key = private_key
-        .to_str()
-        .ok_or("TLS private key path is not UTF-8")?;
+    let tls_files = if config.tls {
+        Some(ensure_tls(config, domain)?)
+    } else {
+        None
+    };
+    let ergo_listener = match &tls_files {
+        Some((certificate, private_key)) => format!(
+            "    \":6697\":\n      tls:\n        cert: {}\n        key: {}\n      min-tls-version: 1.2\n",
+            certificate
+                .to_str()
+                .ok_or("TLS certificate path is not UTF-8")?,
+            private_key
+                .to_str()
+                .ok_or("TLS private key path is not UTF-8")?
+        ),
+        None => "    \":6697\":\n".into(),
+    };
     let network = serde_json::to_string(&irc.network)?;
-    let secure_origin = serde_json::to_string(&format!("https://{domain}:8080"))?;
-    let standard_secure_origin = serde_json::to_string(&format!("https://{domain}"))?;
+    let scheme = if config.tls { "https" } else { "http" };
+    let origin = serde_json::to_string(&format!("{scheme}://{domain}:8080"))?;
+    let standard_origin = serde_json::to_string(&format!("{scheme}://{domain}"))?;
     let ergo = format!(
-        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6667\":\n    \":6697\":\n      tls:\n        cert: {certificate}\n        key: {private_key}\n      min-tls-version: 1.2\naccounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
+        "network:\n  name: {network}\nserver:\n  name: {domain}\n  enforce-utf8: true\n  max-sendq: 96k\n  listeners:\n    \":6667\":\n{ergo_listener}accounts:\n  authentication-enabled: true\n  registration:\n    enabled: false\n  auth-script:\n    enabled: true\n    command: /etc/aurcade/services/aurcade\n    args: [\"auth-ergo\"]\n    autocreate: true\n    timeout: 9s\n    kill-timeout: 1s\n    max-concurrency: 64\ndatastore:\n  path: /var/lib/ergo/ircd.db\nlanguages:\n  enabled: false\n  path: /ircd-bin/languages\nlimits:\n  nicklen: 32\n  identlen: 20\n  realnamelen: 150\n  channellen: 64\n  awaylen: 390\n  kicklen: 390\n  topiclen: 390\n  monitor-entries: 100\n  whowas-entries: 100\n  chan-list-modes: 100\n  registration-messages: 1024\n  multiline:\n    max-bytes: 4096\n    max-lines: 100\nlogging:\n  - method: stderr\n    type: \"* -userinput -useroutput\"\n    level: info\n"
     );
 
     let gamja = serde_json::to_vec_pretty(&serde_json::json!({
@@ -793,12 +813,23 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         .map(|admin| format!("\"{admin}@{domain}\""))
         .collect::<Vec<_>>()
         .join(", ");
+    let prosody_transport = if config.tls {
+        "certificates = \"/var/run/prosody/tls\"\nhttp_ports = { }\nhttps_ports = { 5281 }\nhttps_interfaces = { \"*\" }\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = { certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }\n"
+    } else {
+        "certificates = \"/var/run/prosody/tls\"\nhttp_ports = { 5280 }\nhttp_interfaces = { \"*\" }\nhttps_ports = { }\nc2s_require_encryption = false\ns2s_require_encryption = false\nallow_unencrypted_plain_auth = true\n"
+    };
+    let tls_module = if config.tls { " \"tls\";" } else { "" };
     let prosody = format!(
-        "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\ncertificates = \"/var/run/prosody/tls\"\nhttp_ports = {{ }}\nhttps_ports = {{ 5281 }}\nhttps_interfaces = {{ \"*\" }}\nmodules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\"; \"tls\"; \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; \"websocket\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nc2s_require_encryption = true\ns2s_require_encryption = true\nssl = {{ certificate = \"/var/run/prosody/tls/fullchain.pem\"; key = \"/var/run/prosody/tls/privkey.pem\"; }}\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
+        "daemonize = false\npidfile = \"/var/run/prosody/prosody.pid\"\ndata_path = \"/var/lib/prosody\"\n{prosody_transport}modules_enabled = {{ \"disco\"; \"roster\"; \"saslauth\";{tls_module} \"carbons\"; \"smacks\"; \"ping\"; \"time\"; \"uptime\"; \"version\"; \"websocket\"; }}\nadmins = {{ {admins} }}\nauthentication = \"aurcade\"\nallow_registration = false\nlog = {{ info = \"*console\"; warn = \"*console\"; error = \"*console\"; }}\nVirtualHost \"{domain}\"\n"
     );
 
+    let soju_listener = if config.tls {
+        "listen ircs://:6698\ntls /soju-data/tls/fullchain.pem /soju-data/tls/privkey.pem"
+    } else {
+        "listen irc+insecure://:6698"
+    };
     let soju_config = format!(
-        "listen ircs://:6698\nlisten ws+insecure://:8080\nlisten unix+admin:///run/soju/admin\ntls /soju-data/tls/fullchain.pem /soju-data/tls/privkey.pem\nhostname {domain}\ntitle {network}\ndb sqlite3 /soju-data/soju.db\nmessage-store db\nauth http http://aurcade:9000/soju\nenable-user-on-auth true\nhttp-origin {secure_origin} {standard_secure_origin} \"https://localhost:8080\" \"https://127.0.0.1:8080\"\n"
+        "{soju_listener}\nlisten ws+insecure://:8080\nlisten unix+admin:///run/soju/admin\nhostname {domain}\ntitle {network}\ndb sqlite3 /soju-data/soju.db\nmessage-store db\nauth http http://aurcade:9000/soju\nenable-user-on-auth true\nhttp-origin {origin} {standard_origin} \"{scheme}://localhost:8080\" \"{scheme}://127.0.0.1:8080\"\n"
     );
     let mut soju_users = String::new();
     for account in &config.accounts {
@@ -817,6 +848,10 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     atomic_write(&root.join("prosody.cfg.lua"), &prosody)?;
     atomic_write(&root.join("soju.conf"), &soju_config)?;
     atomic_write(&root.join("soju-users"), &soju_users)?;
+    atomic_write(
+        &root.join("tls-enabled"),
+        if config.tls { "true\n" } else { "false\n" },
+    )?;
     atomic_write(&root.join("maddy-domain"), domain)?;
     atomic_write(&root.join("maddy-users"), &maddy_users)?;
     atomic_write(&root.join("maddy-aliases"), &maddy_aliases)?;
@@ -825,24 +860,17 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         "#!/bin/sh\nexec /etc/aurcade/services/aurcade auth-maddy\n",
     )?;
     fs::set_permissions(root.join("maddy-auth"), fs::Permissions::from_mode(0o755))?;
-    atomic_write_bytes(&root.join("maddy-fullchain.pem"), &fs::read(certificate)?)?;
-    atomic_write_bytes(&root.join("maddy-privkey.pem"), &fs::read(private_key)?)?;
-    fs::set_permissions(
-        root.join("maddy-privkey.pem"),
-        fs::Permissions::from_mode(0o600),
-    )?;
-    atomic_write_bytes(&root.join("soju-fullchain.pem"), &fs::read(certificate)?)?;
-    atomic_write_bytes(&root.join("soju-privkey.pem"), &fs::read(private_key)?)?;
-    fs::set_permissions(
-        root.join("soju-privkey.pem"),
-        fs::Permissions::from_mode(0o600),
-    )?;
-    atomic_write_bytes(&root.join("prosody-fullchain.pem"), &fs::read(certificate)?)?;
-    atomic_write_bytes(&root.join("prosody-privkey.pem"), &fs::read(private_key)?)?;
-    fs::set_permissions(
-        root.join("prosody-privkey.pem"),
-        fs::Permissions::from_mode(0o600),
-    )?;
+    if let Some((certificate, private_key)) = &tls_files {
+        for service in ["maddy", "soju", "prosody"] {
+            atomic_write_bytes(
+                &root.join(format!("{service}-fullchain.pem")),
+                &fs::read(certificate)?,
+            )?;
+            let key = root.join(format!("{service}-privkey.pem"));
+            atomic_write_bytes(&key, &fs::read(private_key)?)?;
+            fs::set_permissions(key, fs::Permissions::from_mode(0o600))?;
+        }
+    }
     atomic_write_bytes(&root.join("aurcade"), &fs::read("/proc/self/exe")?)?;
     fs::set_permissions(root.join("aurcade"), fs::Permissions::from_mode(0o755))?;
     Ok(())
@@ -865,20 +893,26 @@ fn setup(config: &Config) -> Result<(), Error> {
     let root = repo_root();
     fs::create_dir_all(&root)?;
 
-    let (certificate, private_key) =
-        ensure_tls(config, config.domain.as_deref().unwrap_or("localhost"))?;
     let services = service_root();
     fs::create_dir_all(&services)?;
-    atomic_write_bytes(&services.join("web-fullchain.pem"), &fs::read(certificate)?)?;
-    atomic_write_bytes(&services.join("web-privkey.pem"), &fs::read(private_key)?)?;
-    fs::set_permissions(
-        services.join("web-privkey.pem"),
-        fs::Permissions::from_mode(0o600),
+    atomic_write(
+        &services.join("tls-enabled"),
+        if config.tls { "true\n" } else { "false\n" },
     )?;
-
-    // # Optional; omit both to generate persistent self-signed TLS files.
-    # tls_certificate = "tls/fullchain.pem"
-    # tls_private_key = "tls/privkey.pem"
+    let listener = if config.tls {
+        let (certificate, private_key) =
+            ensure_tls(config, config.domain.as_deref().unwrap_or("localhost"))?;
+        atomic_write_bytes(&services.join("web-fullchain.pem"), &fs::read(certificate)?)?;
+        atomic_write_bytes(&services.join("web-privkey.pem"), &fs::read(private_key)?)?;
+        fs::set_permissions(
+            services.join("web-privkey.pem"),
+            fs::Permissions::from_mode(0o600),
+        )?;
+        "$SERVER[\"socket\"] == \":443\" {\n    ssl.engine = \"enable\"\n    ssl.pemfile = \"/etc/aurcade/services/web-fullchain.pem\"\n    ssl.privkey = \"/etc/aurcade/services/web-privkey.pem\"\n}\n"
+    } else {
+        "$SERVER[\"socket\"] == \":443\" { }\n"
+    };
+    atomic_write(&services.join("web-listener.conf"), listener)?;
 
     let paths: BTreeSet<String> = config
         .accounts
@@ -1944,7 +1978,16 @@ mod tests {
             "#,
         )
         .unwrap();
+        assert!(config.tls);
         assert!(validate_config(&config).is_ok());
+        config.tls = false;
+        assert!(validate_config(&config).is_ok());
+        config.tls_certificate = Some("tls/fullchain.pem".into());
+        config.tls_private_key = Some("tls/privkey.pem".into());
+        assert!(validate_config(&config).is_err());
+        config.tls = true;
+        config.tls_certificate = None;
+        config.tls_private_key = None;
         assert_eq!(cgit_style(&config), "cgit.css");
         assert_eq!(cgit_logo(&config), "cgit.png");
         assert_eq!(cgit_favicon(&config), "favicon.ico");
@@ -2081,6 +2124,7 @@ mod tests {
         let config = Config {
             title: "Repositories".into(),
             domain: None,
+            tls: true,
             tls_certificate: None,
             tls_private_key: None,
             description: String::new(),
@@ -2249,6 +2293,7 @@ Features:
         let config = Config {
             title: "Repositories".into(),
             domain: None,
+            tls: true,
             tls_certificate: None,
             tls_private_key: None,
             description: String::new(),

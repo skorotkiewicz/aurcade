@@ -9,6 +9,12 @@ if [ "$#" -gt 0 ]; then
 fi
 
 aurcade setup
+if [ "$(cat /etc/aurcade/services/tls-enabled)" = false ]; then
+    sed -i \
+        -e 's/"X-Forwarded-Proto" => "https"/"X-Forwarded-Proto" => "http"/' \
+        -e 's/"https-remap" => "enable"/"https-remap" => "disable"/' \
+        /etc/lighttpd/lighttpd.conf
+fi
 if [ -f /etc/aurcade/irc.toml ] && [ -f /etc/aurcade/xmpp.toml ] && [ -f /etc/aurcade/soju.toml ] && [ -f /etc/aurcade/mail.toml ]; then
     aurcade generate-services
     cp /etc/aurcade/services/gamja-config.json /usr/share/webapps/gamja/config.json

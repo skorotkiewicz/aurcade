@@ -1,14 +1,17 @@
 #!/bin/sh
 set -eu
 
-config=/etc/aurcade/services/soju.conf
-users=/etc/aurcade/services/soju-users
-until [ -r "$config" ] && [ -r "$users" ]; do
+services=/etc/aurcade/services
+config=$services/soju.conf
+users=$services/soju-users
+until [ -r "$config" ] && [ -r "$users" ] && [ -r "$services/tls-enabled" ]; do
     sleep 1
 done
 install -d -m 700 -o soju -g soju /run/soju /soju-data /soju-data/tls
-install -m 644 -o soju -g soju /etc/aurcade/services/soju-fullchain.pem /soju-data/tls/fullchain.pem
-install -m 600 -o soju -g soju /etc/aurcade/services/soju-privkey.pem /soju-data/tls/privkey.pem
+if [ "$(cat "$services/tls-enabled")" = true ]; then
+    install -m 644 -o soju -g soju "$services/soju-fullchain.pem" /soju-data/tls/fullchain.pem
+    install -m 600 -o soju -g soju "$services/soju-privkey.pem" /soju-data/tls/privkey.pem
+fi
 chown -R soju:soju /soju-data
 rm -f /run/soju/admin
 su-exec soju soju -config "$config" &

@@ -2,14 +2,25 @@
 set -eu
 
 services=/etc/aurcade/services
-config=/etc/maddy/maddy.conf
+config=/tmp/maddy.conf
 until [ -r "$services/maddy-domain" ] \
     && [ -r "$services/maddy-users" ] \
-    && [ -r "$services/maddy-fullchain.pem" ] \
-    && [ -r "$services/maddy-privkey.pem" ] \
+    && [ -r "$services/tls-enabled" ] \
     && [ -x "$services/maddy-auth" ]; do
     sleep 1
 done
+
+cp /etc/maddy/maddy.conf "$config"
+if [ "$(cat "$services/tls-enabled")" = true ]; then
+    until [ -r "$services/maddy-fullchain.pem" ] && [ -r "$services/maddy-privkey.pem" ]; do
+        sleep 1
+    done
+else
+    sed -i \
+        -e 's|^tls file .*|tls off|' \
+        -e 's|^imap tls://|imap tcp://|' \
+        "$config"
+fi
 
 MADDY_DOMAIN=$(cat "$services/maddy-domain")
 export MADDY_DOMAIN

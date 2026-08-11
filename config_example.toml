@@ -1,6 +1,8 @@
 title = "AURcade"
 domain = "example.com"
-# Optional; omit both to generate persistent self-signed TLS files.
+# Defaults to true. Set false only for an isolated, trusted network.
+tls = true
+# Optional with tls = true; omit both to generate persistent self-signed TLS files.
 # tls_certificate = "tls/fullchain.pem"
 # tls_private_key = "tls/privkey.pem"
 description = "a fast webinterface for the git dscm"

@@ -28,7 +28,9 @@ Create `config.toml`:
 ```toml
 title = "AURcade"
 domain = "example.com"
-# Omit both to generate persistent self-signed files under ./tls.
+# Defaults to true. Set false only for an isolated, trusted network.
+tls = true
+# With TLS enabled, omit both to generate persistent self-signed files under ./tls.
 # tls_certificate = "tls/fullchain.pem"
 # tls_private_key = "tls/privkey.pem"
 description = "My Git repositories"
@@ -85,7 +87,7 @@ With Compose:
 docker compose up --build -d
 ```
 
-Open <https://localhost:8080>. The generated certificate is self-signed unless configured otherwise, so browsers may require confirmation. After account, domain, or service configuration changes, run `docker compose up -d --force-recreate`.
+Open <https://localhost:8080>. The generated certificate is self-signed unless configured otherwise, so browsers may require confirmation. With `tls = false`, use <http://localhost:8080>; all published web, IRC, XMPP, submission, and IMAP endpoints become plaintext on their existing ports. Use this mode only on an isolated, trusted network. After account, domain, or service configuration changes, run `docker compose up -d --force-recreate`.
 
 ## Access
 
@@ -142,17 +144,20 @@ Endpoints:
 - IRC TLS: `localhost:6697`
 - Soju IRC TLS: `localhost:6698`
 - XMPP clients: `alice@DOMAIN` on port `5222`
-- XMPP over WebSocket: `wss://localhost:5281/xmpp-websocket`
+- XMPP over WebSocket: `wss://localhost:5281/xmpp-websocket`, or `ws://localhost:5280/xmpp-websocket` with `tls = false`
 - XMPP federation: port `5269`
 
 Gamja connects through Soju, so browser and native bouncer clients share one upstream session and persistent history in `soju_data`. Accounts and passwords remain authoritative in `config.toml`; administrators are listed in `soju.toml`.
 
-When both global TLS paths are omitted, AURcade generates a persistent self-signed certificate in `./aurcade_data/tls`. Configure both paths to use a CA-issued certificate instead:
+TLS defaults to enabled. AURcade first uses both configured global TLS paths. When they are omitted, it generates a persistent self-signed certificate in `./aurcade_data/tls`. The selected certificate is used by the web server, Ergo, Soju, Prosody, Maddy, and SnappyMail:
 
 ```toml
+tls = true
 tls_certificate = "tls/fullchain.pem"
 tls_private_key = "tls/privkey.pem"
 ```
+
+Set `tls = false` for plaintext-only operation. Certificate paths are not accepted in that mode.
 
 ## Email
 

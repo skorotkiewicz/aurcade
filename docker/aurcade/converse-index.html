@@ -12,7 +12,7 @@
     <script src="/xmpp/converse.min.js"></script>
     <script>
         converse.initialize({
-            websocket_url: "wss://" + location.hostname + ":5281/xmpp-websocket",
+            websocket_url: (location.protocol === "https:" ? "wss://" + location.hostname + ":5281" : "ws://" + location.hostname + ":5280") + "/xmpp-websocket",
             view_mode: "fullscreen",
             allow_registration: false,
             allow_bookmarks: false,

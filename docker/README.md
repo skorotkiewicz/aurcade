@@ -33,7 +33,7 @@ A small Git repository host for static accounts.
    docker compose up --build -d
    ```
 
-4. Open <https://localhost:8080>.
+4. Open <https://localhost:8080>. With `tls = false`, use <http://localhost:8080> only on an isolated, trusted network.
 
 The SSH service uses port `2222` on the host.
 
@@ -50,6 +50,7 @@ Create `config.toml` with:
 
 ```toml
 title = "AURcade"
+tls = true # default; configured certificate first, otherwise self-signed
 description = "My Git repositories"
 clone_prefix = "https://localhost:8080 ssh://git@localhost:2222"
 style = "cgit-theme.css"
