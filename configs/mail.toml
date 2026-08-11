@@ -1,0 +1,6 @@
+postmaster = "alice"
+
+[aliases]
+support = "alice"
+admin = "alice"
+docker run --rm --entrypoint sh djmaze/snappymail:latest -c 'find / -maxdepth 3 -type f \( -name "*.ini" -o -name "*.conf" -o -name "entrypoint*" \) 2>/dev/null | sort | head -100; echo ---; ls -la /var/lib/snappymail /var/www/html 2>/dev/null || true'

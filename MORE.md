@@ -59,10 +59,10 @@ You need Git, Docker, and Docker Compose.
 2. Copy the example configuration.
 
    ```sh
-   cp config_example.toml config.toml
+   cp configs/config_example.toml configs/config.toml
    ```
 
-3. Edit `domain`, `clone_prefix`, and the site text in `config.toml`.
+3. Edit `domain`, `clone_prefix`, and the site text in `configs/config.toml`.
 
 4. Generate an account block.
 
@@ -90,7 +90,7 @@ docker compose up -d --force-recreate
 
 ## Configuration
 
-`config.toml` is the account and site configuration:
+`configs/config.toml` is the account and site configuration:
 
 ```toml
 title = "AURcade"
@@ -190,7 +190,7 @@ gpg_keys = ['''
 ''']
 ```
 
-You can also mount public-key files and reference them from `config.toml`:
+You can also mount public-key files and reference them from `configs/config.toml`:
 
 ```toml
 gpg_key_files = ["keys/alice.asc"]
@@ -204,21 +204,21 @@ The SSH lobby calendar counts trusted signed commits on each repository's defaul
 
 ## Chat configuration
 
-The service files contain only service-specific settings:
+The service files in `configs/` contain only service-specific settings:
 
 ```toml
-# irc.toml
+# configs/irc.toml
 network = "AURcade"
 autojoin = ["#aurcade"]
 ```
 
 ```toml
-# xmpp.toml
+# configs/xmpp.toml
 admins = ["alice"]
 ```
 
 ```toml
-# soju.toml
+# configs/soju.toml
 admins = ["alice"]
 ```
 
@@ -260,7 +260,7 @@ Set `tls = false` only on an isolated trusted network. AURcade rejects certifica
 
 ## Email configuration
 
-Maddy creates a mailbox for each password-enabled account. `mail.toml` defines the postmaster and local aliases:
+Maddy creates a mailbox for each password-enabled account. `configs/mail.toml` defines the postmaster and local aliases:
 
 ```toml
 postmaster = "alice"
@@ -292,18 +292,19 @@ Publish the value as the TXT record `default._domainkey.DOMAIN`.
 
 ## Persistent data
 
-AURcade stores user-managed and generated data under `aurcade_data`:
+AURcade uses these host paths:
 
 | Path | Contents |
 | --- | --- |
-| `repositories/` | Git repositories and `.aurcade-trash/` |
+| `configs/` | Site, account, chat, and mail configuration |
 | `keys/` | Referenced GPG public keys |
-| `tls/` | Configured or generated TLS files |
-| `ssh_host_keys/` | SSH host identity |
-| `srv/ergo_data/` | Ergo state |
-| `srv/soju_data/` | Soju accounts and history |
-| `srv/prosody_data/` | Prosody state |
-| `srv/maddy_data/` | Mail, queues, and DKIM keys |
-| `srv/snappymail_data/` | SnappyMail state |
+| `aurcade_data/repositories/` | Git repositories and `.aurcade-trash/` |
+| `aurcade_data/tls/` | Configured or generated TLS files |
+| `aurcade_data/ssh_host_keys/` | SSH host identity |
+| `aurcade_data/srv/ergo_data/` | Ergo state |
+| `aurcade_data/srv/soju_data/` | Soju accounts and history |
+| `aurcade_data/srv/prosody_data/` | Prosody state |
+| `aurcade_data/srv/maddy_data/` | Mail, queues, and DKIM keys |
+| `aurcade_data/srv/snappymail_data/` | SnappyMail state |
 
-Copy `aurcade_data` to backup storage. AURcade keeps stored mail when you remove an account from `config.toml`.
+Copy `configs`, `keys`, and `aurcade_data` to backup storage. AURcade keeps stored mail after account removal.

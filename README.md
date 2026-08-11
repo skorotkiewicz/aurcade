@@ -28,7 +28,7 @@ You need Git, Docker, and Docker Compose.
 ```sh
 git clone https://github.com/skorotkiewicz/aurcade.git
 cd aurcade
-cp config_example.toml config.toml
+cp configs/config_example.toml configs/config.toml
 ```
 
 Generate your account block:
@@ -37,7 +37,7 @@ Generate your account block:
 docker compose run --rm --no-deps aurcade account-template alice
 ```
 
-Replace the example `[[accounts]]` block in `config.toml` with the printed block. Then set your `domain` and `clone_prefix`.
+Replace the example `[[accounts]]` block in `configs/config.toml` with the printed block. Then set your `domain` and `clone_prefix`.
 
 Start the cabinet:
 
