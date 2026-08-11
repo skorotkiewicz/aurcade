@@ -1,0 +1,48 @@
+
+/* Optional markdown description block injected via cgitrc header=. */
+.aurcade-header {
+    box-sizing: border-box;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+.aurcade-header .markdown {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border, #ccc);
+    border-radius: 6px;
+    background: var(--panel, #f8f8f8);
+    overflow-wrap: break-word;
+}
+.aurcade-header .markdown > :first-child { margin-top: 0; }
+.aurcade-header .markdown > :last-child { margin-bottom: 0; }
+.aurcade-header .markdown h1,
+.aurcade-header .markdown h2,
+.aurcade-header .markdown h3 { color: var(--text, #333); }
+.aurcade-header .markdown a { color: var(--accent, #069); }
+.aurcade-header .markdown a:hover { color: var(--accent-strong, #036); }
+.aurcade-header .markdown ul,
+.aurcade-header .markdown ol { padding-left: 1.5rem; }
+.aurcade-header .markdown blockquote {
+    margin: .5rem 0;
+    padding: .1rem .75rem;
+    border-left: 3px solid var(--accent, #069);
+    color: var(--muted, #777);
+}
+.aurcade-header .markdown code {
+    padding: .1rem .3rem;
+    border-radius: 4px;
+    background: var(--panel-hover, #eee);
+    font-family: ui-monospace, monospace;
+    font-size: .9em;
+}
+.aurcade-header .markdown pre {
+    padding: .75rem;
+    border: 1px solid var(--border, #ccc);
+    border-radius: 6px;
+    background: var(--panel-hover, #eee);
+    overflow-x: auto;
+}
+.aurcade-header .markdown pre code { padding: 0; background: transparent; }
+
+@media (max-width: 700px) {
+    .aurcade-header { padding: 1rem 1rem 0; }
+}

@@ -63,6 +63,7 @@ COPY --from=converse-build /src/dist/ /usr/share/webapps/converse/
 COPY docker/converse-index.html /usr/share/webapps/converse/index.html
 COPY docker/lighttpd.conf /etc/lighttpd/lighttpd.conf
 COPY docker/cgit-theme.css /usr/share/webapps/cgit/cgit-theme.css
+COPY docker/cgit-header.css /tmp/cgit-header.css
 COPY docker/aurcade-logo.svg /usr/share/webapps/cgit/aurcade-logo.svg
 COPY docker/aurcade-favicon.svg /usr/share/webapps/cgit/aurcade-favicon.svg
 COPY docker/about-filter.py /usr/local/bin/aurcade-about-filter
@@ -71,6 +72,8 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint
 RUN passwd -d git \
     && sed -i 's/ -X / -O xhtml /' /usr/lib/cgit/filters/syntax-highlighting.sh \
     && highlight -O xhtml --style-outfile=stdout --print-style >> /usr/share/webapps/cgit/cgit.css \
+    && cat /tmp/cgit-header.css >> /usr/share/webapps/cgit/cgit.css \
+    && cat /tmp/cgit-header.css >> /usr/share/webapps/cgit/cgit-theme.css \
     && chmod +x /usr/lib/cgit/filters/syntax-highlighting.sh /usr/local/bin/aurcade-about-filter /usr/local/bin/aurcade-gpgv /usr/local/bin/entrypoint \
     && printf '\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers git\n' >> /etc/ssh/sshd_config
 EXPOSE 22 80

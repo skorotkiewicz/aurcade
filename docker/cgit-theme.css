@@ -35,7 +35,7 @@ div#cgit {
     max-width: 1200px;
     min-height: 100vh;
     margin: auto;
-    padding: 2rem;
+    padding: 1rem;
 }
 
 div#cgit a { color: var(--accent); }
@@ -223,54 +223,10 @@ div#cgit .hl.kwa { color: #c678dd; font-weight: 600; }
 div#cgit .hl.kwb { color: #61afef; }
 div#cgit .hl.kwc { color: #e5c07b; }
 
-/* Optional markdown description block injected via cgitrc header=. */
-.aurcade-header {
-    box-sizing: border-box;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem 2rem 0;
-}
-.aurcade-header .markdown {
-    padding: 1rem 1.25rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--panel);
-    overflow-wrap: break-word;
-}
-.aurcade-header .markdown > :first-child { margin-top: 0; }
-.aurcade-header .markdown > :last-child { margin-bottom: 0; }
-.aurcade-header .markdown h1,
-.aurcade-header .markdown h2,
-.aurcade-header .markdown h3 { color: var(--text); }
-.aurcade-header .markdown a { color: var(--accent); }
-.aurcade-header .markdown a:hover { color: var(--accent-strong); }
-.aurcade-header .markdown ul,
-.aurcade-header .markdown ol { padding-left: 1.5rem; }
-.aurcade-header .markdown blockquote {
-    margin: .5rem 0;
-    padding: .1rem .75rem;
-    border-left: 3px solid var(--accent);
-    color: var(--muted);
-}
-.aurcade-header .markdown code {
-    padding: .1rem .3rem;
-    border-radius: 4px;
-    background: var(--panel-hover);
-    font-family: ui-monospace, monospace;
-    font-size: .9em;
-}
-.aurcade-header .markdown pre {
-    padding: .75rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--panel-hover);
-    overflow-x: auto;
-}
-.aurcade-header .markdown pre code { padding: 0; background: transparent; }
+.aurcade-header { padding: 1rem 1rem 0; }
 
 @media (max-width: 700px) {
     div#cgit { padding: 1rem; }
-    .aurcade-header { padding: 1rem 1rem 0; }
     div#cgit table#header td.form,
     div#cgit table.tabs td.form { display: none; }
     div#cgit div.content { overflow-x: auto; }
