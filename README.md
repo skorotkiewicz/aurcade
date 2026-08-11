@@ -153,6 +153,18 @@ tls_certificate = "tls/fullchain.pem"
 tls_private_key = "tls/privkey.pem"
 ```
 
+## Email
+
+Maddy creates a mailbox for each account with a `password_hash`. Use the full address, such as `alice@DOMAIN`, and the same password as IRC/XMPP.
+
+- Incoming SMTP: port `25` with STARTTLS when available
+- Authenticated submission: port `587` with STARTTLS required before authentication
+- IMAP: port `993` with TLS
+
+Mail, queues, and generated DKIM keys persist in `./srv/maddy_data`. The first password-enabled account receives mail addressed to `postmaster`. Restart the stack after changing accounts so new mailboxes are provisioned; removed accounts retain their stored mail.
+
+Before using public email, configure an `A`/`AAAA` record, an `MX` record pointing at `DOMAIN`, matching reverse DNS, SPF, and DMARC. After Maddy starts, publish the value from `./srv/maddy_data/dkim_keys/DOMAIN_default.dns` as the TXT record `default._domainkey.DOMAIN`.
+
 ## Signed commits
 
 SSH-signed commits are verified with the account's `ssh_keys`. For GPG signatures, add complete armored public keys:

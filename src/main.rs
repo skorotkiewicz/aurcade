@@ -135,6 +135,7 @@ fn run() -> Result<(), Error> {
     match command.as_deref() {
         Some("setup") if args.next().is_none() => setup(&config),
         Some("auth-ergo") if args.next().is_none() => authenticate_ergo(&config),
+        Some("auth-maddy") if args.next().is_none() => authenticate_maddy(&config),
         Some("auth-server") if args.next().is_none() => auth_server(&config),
         Some("generate-services") if args.next().is_none() => generate_services(&config),
         Some("serve") => {
@@ -145,7 +146,7 @@ fn run() -> Result<(), Error> {
             serve(&config, &account)
         }
         _ => Err(
-            "usage: aurcade setup | serve ACCOUNT | hash-password | account-template NAME | auth-ergo | auth-server | generate-services".into(),
+            "usage: aurcade setup | serve ACCOUNT | hash-password | account-template NAME | auth-ergo | auth-maddy | auth-server | generate-services".into(),
         ),
     }
 }
@@ -201,6 +202,42 @@ fn authenticate_ergo(config: &Config) -> Result<(), Error> {
     )?;
     println!();
     Ok(())
+}
+
+fn verify_mail_password(config: &Config, username: &str, password: &str, dummy_hash: &str) -> bool {
+    let account = username
+        .rsplit_once('@')
+        .filter(|(name, domain)| {
+            valid_account_name(name)
+                && config
+                    .domain
+                    .as_deref()
+                    .is_some_and(|configured| configured.eq_ignore_ascii_case(domain))
+        })
+        .and_then(|(name, _)| {
+            config
+                .accounts
+                .iter()
+                .find(|account| account.name.eq_ignore_ascii_case(name))
+        });
+    verify_password(account, password, dummy_hash)
+}
+
+fn authenticate_maddy(config: &Config) -> Result<(), Error> {
+    let mut username = String::new();
+    let mut password = String::new();
+    io::stdin().read_line(&mut username)?;
+    io::stdin().read_line(&mut password)?;
+    if username.len() > 320 || password.len() > 4096 {
+        return Err("Maddy authentication request is too large".into());
+    }
+    let username = username.trim_end_matches(['\r', '\n']);
+    let password = password.trim_end_matches(['\r', '\n']);
+    if verify_mail_password(config, username, password, DUMMY_PASSWORD_HASH) {
+        Ok(())
+    } else {
+        Err("invalid mail credentials".into())
+    }
 }
 
 fn auth_response(stream: &mut TcpStream, status: &str) -> io::Result<()> {
@@ -712,12 +749,22 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         "listen ircs://:6698\nlisten ws+insecure://:8080\nlisten unix+admin:///run/soju/admin\ntls /soju-data/tls/fullchain.pem /soju-data/tls/privkey.pem\nhostname {domain}\ntitle {network}\ndb sqlite3 /soju-data/soju.db\nmessage-store db\nauth http http://aurcade:9000/soju\nenable-user-on-auth true\nhttp-origin {origin} {secure_origin} \"http://localhost:8080\" \"http://127.0.0.1:8080\"\n"
     );
     let mut soju_users = String::new();
+    let mut maddy_users = String::new();
+    let mut maddy_aliases = String::new();
     for account in &config.accounts {
         let admin = soju
             .admins
             .iter()
             .any(|admin| admin.eq_ignore_ascii_case(&account.name));
         soju_users.push_str(&format!("{}\t{}\t{}\n", account.name, admin, irc.network));
+        if account.password_hash.is_some() {
+            let address = format!("{}@{domain}", account.name);
+            if maddy_aliases.is_empty() {
+                maddy_aliases = format!("postmaster: {address}\n");
+            }
+            maddy_users.push_str(&address);
+            maddy_users.push('\n');
+        }
     }
 
     let root = service_root();
@@ -727,6 +774,20 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     atomic_write(&root.join("prosody.cfg.lua"), &prosody)?;
     atomic_write(&root.join("soju.conf"), &soju_config)?;
     atomic_write(&root.join("soju-users"), &soju_users)?;
+    atomic_write(&root.join("maddy-domain"), domain)?;
+    atomic_write(&root.join("maddy-users"), &maddy_users)?;
+    atomic_write(&root.join("maddy-aliases"), &maddy_aliases)?;
+    atomic_write(
+        &root.join("maddy-auth"),
+        "#!/bin/sh\nexec /etc/aurcade/services/aurcade auth-maddy\n",
+    )?;
+    fs::set_permissions(root.join("maddy-auth"), fs::Permissions::from_mode(0o755))?;
+    atomic_write_bytes(&root.join("maddy-fullchain.pem"), &fs::read(certificate)?)?;
+    atomic_write_bytes(&root.join("maddy-privkey.pem"), &fs::read(private_key)?)?;
+    fs::set_permissions(
+        root.join("maddy-privkey.pem"),
+        fs::Permissions::from_mode(0o600),
+    )?;
     atomic_write_bytes(&root.join("soju-fullchain.pem"), &fs::read(certificate)?)?;
     atomic_write_bytes(&root.join("soju-privkey.pem"), &fs::read(private_key)?)?;
     fs::set_permissions(
@@ -1721,7 +1782,7 @@ mod tests {
         assert!(account.contains(&format!("password_hash = \"{hash}\"")));
         assert!(account.contains("paths = [\"alice/\"]"));
         let config: Config = toml::from_str(&format!(
-            "title = \"Test\"\nclone_prefix = \"https://git.example\"\n{account}"
+            "title = \"Test\"\ndomain = \"mail.example\"\nclone_prefix = \"https://git.example\"\n{account}"
         ))
         .unwrap();
         validate_config(&config).unwrap();
@@ -1735,6 +1796,24 @@ mod tests {
         assert!(!verify_password(
             None,
             "correct horse battery staple",
+            &dummy
+        ));
+        assert!(verify_mail_password(
+            &config,
+            "Alice@mail.example",
+            "correct horse battery staple",
+            &dummy
+        ));
+        assert!(!verify_mail_password(
+            &config,
+            "alice@other.example",
+            "correct horse battery staple",
+            &dummy
+        ));
+        assert!(!verify_mail_password(
+            &config,
+            "alice@mail.example",
+            "wrong",
             &dummy
         ));
         assert_eq!(
