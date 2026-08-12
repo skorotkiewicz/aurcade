@@ -321,26 +321,6 @@ Alias targets must be password-enabled account names. The postmaster account rec
 
 AURcade does not create a catch-all alias. SnappyMail has no published port or administrator panel.
 
-### Upgrade from Maddy mailboxes
-
-The first Dovecot upgrade needs a short mail pause so no message arrives after the migration snapshot:
-
-```sh
-docker compose stop maddy snappymail
-docker compose up --build -d
-```
-
-The one-shot `mail-migrate` service copies existing Maddy mail into `aurcade_data/srv/dovecot_data`, verifies the exported message count, and exits. It never deletes `aurcade_data/srv/maddy_data`. Later starts skip the completed import.
-
-Check the cutover:
-
-```sh
-docker compose ps -a setup mail-migrate
-docker compose ps dovecot maddy snappymail
-```
-
-Both one-shot services must show `Exited (0)`. Dovecot, Maddy, and SnappyMail must be healthy.
-
 Before public email use, configure these DNS records:
 
 - An `A` or `AAAA` record for `DOMAIN`
@@ -372,7 +352,7 @@ AURcade uses these host paths:
 | `aurcade_data/srv/ergo_data/` | Ergo state |
 | `aurcade_data/srv/soju_data/` | Soju accounts and history |
 | `aurcade_data/srv/prosody_data/` | Prosody state |
-| `aurcade_data/srv/maddy_data/` | Maddy queues, DKIM keys, and retained pre-Dovecot mailbox data |
+| `aurcade_data/srv/maddy_data/` | Maddy queues and DKIM keys |
 | `aurcade_data/srv/dovecot_data/` | Mailboxes, indexes, and Sieve scripts |
 | `aurcade_data/srv/snappymail_data/` | SnappyMail state |
 

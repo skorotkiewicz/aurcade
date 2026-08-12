@@ -44,7 +44,7 @@ fi
 export SECURE_COOKIES
 
 chown -R www-data:www-data /var/lib/snappymail
-install -d -m 750 -o www-data -g www-data "$data/configs" "$data/domains"
+install -d -m 750 -o www-data -g www-data "$data/configs" "$data/domains" "$data/cache"
 if [ ! -f "$config" ]; then
     su - www-data -s /bin/sh -c 'php /snappymail/index.php' >/dev/null
 fi

@@ -138,22 +138,6 @@ services:
       - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
       - ./aurcade_data/srv/soju_data:/soju-data
 
-  mail-migrate:
-    image: ghcr.io/skorotkiewicz/aurcade-dovecot
-    container_name: aurcade-mail-migrate
-    build:
-      context: .
-      dockerfile: docker/dovecot/Dockerfile
-    restart: "no"
-    entrypoint: ["/usr/local/bin/aurcade-mail-migrate"]
-    depends_on:
-      setup:
-        condition: service_completed_successfully
-    volumes:
-      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
-      - ./aurcade_data/srv/maddy_data:/old-maddy:ro
-      - ./aurcade_data/srv/dovecot_data:/var/lib/dovecot
-
   dovecot:
     image: ghcr.io/skorotkiewicz/aurcade-dovecot
     container_name: dovecot
@@ -162,7 +146,7 @@ services:
       dockerfile: docker/dovecot/Dockerfile
     restart: unless-stopped
     depends_on:
-      mail-migrate:
+      setup:
         condition: service_completed_successfully
     ports:
       - "993:993"

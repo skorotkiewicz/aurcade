@@ -712,7 +712,7 @@ fn mail_account_files(
     config: &Config,
     mail: &MailConfig,
     domain: &str,
-) -> Result<(String, String, String), Error> {
+) -> Result<(String, String), Error> {
     let mail_account = |name: &str| {
         config.accounts.iter().find(|account| {
             account.password_hash.is_some() && account.name.eq_ignore_ascii_case(name)
@@ -720,12 +720,10 @@ fn mail_account_files(
     };
     let postmaster = mail_account(&mail.postmaster)
         .ok_or("mail postmaster must be a password-enabled account")?;
-    let mut users = String::new();
     let mut dovecot_users = String::new();
     for account in &config.accounts {
         if let Some(hash) = &account.password_hash {
             let address = format!("{}@{domain}", account.name);
-            users.push_str(&format!("{address}\n"));
             dovecot_users.push_str(&format!(
                 "{address}:{{ARGON2ID}}{hash}:5000:5000::/var/lib/dovecot/users/{address}::\n"
             ));
@@ -753,7 +751,7 @@ fn mail_account_files(
         })?;
         aliases.push_str(&format!("{alias}@{domain}: {}@{domain}\n", account.name));
     }
-    Ok((users, aliases, dovecot_users))
+    Ok((aliases, dovecot_users))
 }
 
 fn generate_services(config: &Config) -> Result<(), Error> {
@@ -866,7 +864,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
             .any(|admin| admin.eq_ignore_ascii_case(&account.name));
         soju_users.push_str(&format!("{}\t{}\t{}\n", account.name, admin, irc.network));
     }
-    let (maddy_users, maddy_aliases, dovecot_users) = mail_account_files(config, &mail, domain)?;
+    let (maddy_aliases, dovecot_users) = mail_account_files(config, &mail, domain)?;
 
     let root = service_root();
     fs::create_dir_all(&root)?;
@@ -880,7 +878,6 @@ fn generate_services(config: &Config) -> Result<(), Error> {
         if config.tls { "true\n" } else { "false\n" },
     )?;
     atomic_write(&root.join("maddy-domain"), domain)?;
-    atomic_write(&root.join("maddy-users"), &maddy_users)?;
     atomic_write(&root.join("maddy-aliases"), &maddy_aliases)?;
     atomic_write(&root.join("dovecot-users"), &dovecot_users)?;
     atomic_write(
@@ -1892,9 +1889,7 @@ mod tests {
         )
         .unwrap();
 
-        let (users, aliases, dovecot_users) =
-            mail_account_files(&config, &mail, "mail.example").unwrap();
-        assert_eq!(users, "alice@mail.example\n");
+        let (aliases, dovecot_users) = mail_account_files(&config, &mail, "mail.example").unwrap();
         assert_eq!(
             aliases,
             "postmaster: alice@mail.example\npostmaster@mail.example: alice@mail.example\nadmin@mail.example: alice@mail.example\nsupport@mail.example: alice@mail.example\n"
