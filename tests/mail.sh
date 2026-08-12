@@ -9,7 +9,7 @@ if [[ -z ${AURCADE_MAIL_ALIAS:-} ]]; then
         /^\[/ { aliases=0 }
         aliases {
             value=$2
-            gsub(/[ \t\"]/, "", value)
+            gsub(/[ \t"]/, "", value)
             if (value == target) { key=$1; gsub(/[ \t]/, "", key); print key; exit }
         }
     ' services/mail.toml)
