@@ -107,6 +107,7 @@ markdown_description = """
 - [IRC](/chat/)
 - [XMPP](/xmpp/)
 - [Webmail](/mail/)
+- [Status](/status/)
 """
 aur_paths = ["alice/aur/"]
 clone_prefix = "https://example.com:8080 ssh://git@example.com:2222"
@@ -171,6 +172,8 @@ ssh -p 2222 git@localhost delete alice/old-repo --confirm alice/old-repo
 
 AURcade moves the repository to `.aurcade-trash/` in the repository directory.
 
+Root repository routes used by the web UI, such as `chat`, `mail`, `status`, and `xmpp`, are reserved. Nested names such as `alice/chat` remain valid.
+
 Add a plain-text `.aurcade` file to set a repository description:
 
 ```text
@@ -184,7 +187,7 @@ AURcade refreshes metadata after each push.
 Set one or more repository rules in `config.toml`:
 
 ```toml
-aur_paths = ["aur/", "alice/aur/"]
+aur_paths = ["alice/aur/"]
 ```
 
 Each package repository needs committed `PKGBUILD` and `.SRCINFO` files. The repository name must match `pkgbase`.

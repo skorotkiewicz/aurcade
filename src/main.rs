@@ -697,16 +697,40 @@ fn normalize_gpg_public_key(key: &str) -> Result<String, Error> {
     Ok(key)
 }
 
+fn reserved_web_route(segment: &str) -> bool {
+    matches!(
+        segment,
+        "aur"
+            | "chat"
+            | "mail"
+            | "status"
+            | "webirc"
+            | "xmpp"
+            | "xmpp-websocket"
+            | "cgit.cgi"
+            | "favicon.ico"
+            | "robots.txt"
+    ) || [
+        ".css", ".gif", ".jpeg", ".jpg", ".js", ".png", ".svg", ".webp",
+    ]
+    .iter()
+    .any(|extension| segment.ends_with(extension))
+}
+
 fn normalize_repo(path: &str) -> Result<String, Error> {
     let path = path
         .trim_matches('/')
         .strip_suffix(".git")
         .unwrap_or(path.trim_matches('/'));
-    if path.is_empty()
-        || matches!(
-            path.split('/').next(),
-            Some(".aurcade-trash" | ".aurcade-activity")
+    let first = path.split('/').next().unwrap_or("");
+    if reserved_web_route(first) {
+        return Err(format!(
+            "GAME OVER: repository route '{first}' is occupied by the web arcade. PICK ANOTHER CARTRIDGE."
         )
+        .into());
+    }
+    if path.is_empty()
+        || matches!(first, ".aurcade-trash" | ".aurcade-activity")
         || path.split('/').any(|part| {
             part.is_empty()
                 || matches!(part, "." | "..")
@@ -2075,6 +2099,30 @@ mod tests {
         assert_eq!(parse_delete_command("uname -a").unwrap(), None);
         assert!(normalize_repo(".aurcade-trash/repository").is_err());
         assert!(normalize_repo(".aurcade-activity/alice").is_err());
+        for route in [
+            "aur",
+            "chat/game",
+            "mail",
+            "status",
+            "webirc",
+            "xmpp",
+            "xmpp-websocket",
+            "cgit.cgi",
+            "favicon.ico",
+            "robots.txt",
+            "theme.css",
+            "logo.svg/game",
+        ] {
+            assert!(
+                normalize_repo(route).is_err(),
+                "accepted reserved route {route}"
+            );
+        }
+        assert_eq!(normalize_repo("alice/chat").unwrap(), "alice/chat");
+        assert_eq!(
+            normalize_repo("alice/theme.css").unwrap(),
+            "alice/theme.css"
+        );
     }
 
     #[test]
@@ -2156,7 +2204,7 @@ mod tests {
         .unwrap();
         assert!(config.tls);
         assert!(config.aur_paths.is_empty());
-        config.aur_paths = vec!["aur/".into(), "alice/aur/".into()];
+        config.aur_paths = vec!["alice/aur/".into(), "bob/aur/".into()];
         assert!(validate_config(&config).is_ok());
         config.aur_paths = vec!["../outside".into()];
         assert!(validate_config(&config).is_err());
