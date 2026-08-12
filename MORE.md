@@ -33,9 +33,10 @@ AURcade is a small self-hosted Git, chat, and mail server. One TOML file control
 
 ### Mail
 
-- Maddy SMTP, submission, IMAP, DKIM, and local aliases
-- SnappyMail webmail at `/mail/`
-- Persistent mailboxes, queues, and DKIM keys
+- Maddy SMTP, submission, DKIM, outbound queues, and local aliases
+- Dovecot IMAP, LMTP delivery, ManageSieve, and server-side Sieve filters
+- SnappyMail webmail and filter editor at `/mail/`
+- Persistent mailboxes, queues, Sieve scripts, and DKIM keys
 - Stored mail remains after account removal
 
 ### Accounts and security
@@ -282,6 +283,7 @@ Gamja connects through Soju. Browser and native bouncer clients share the same I
 | Incoming SMTP | Port `25`, STARTTLS available | Plaintext on `25` |
 | Mail submission | Port `587`, STARTTLS required | Plaintext on `587` |
 | IMAP | TLS on `993` | Plaintext on `993` |
+| ManageSieve | STARTTLS on `4190` | Plaintext on `4190` |
 
 Use `ACCOUNT@DOMAIN` to sign in to XMPP, email, and webmail. Use the account name for IRC and Soju.
 
@@ -297,13 +299,15 @@ tls_certificate = "tls/fullchain.pem"
 tls_private_key = "tls/privkey.pem"
 ```
 
-AURcade uses the selected certificate for the web server, Ergo, Soju, Prosody, Maddy, and SnappyMail.
+AURcade uses the selected certificate for the web server, Ergo, Soju, Prosody, Maddy, Dovecot, and SnappyMail.
 
 Set `tls = false` only on an isolated trusted network. AURcade rejects certificate paths in plaintext mode.
 
 ## Email configuration
 
-Maddy creates a mailbox for each password-enabled account. `services/mail.toml` defines the postmaster and local aliases:
+Maddy handles SMTP, submission, DKIM, and outbound queues. Dovecot stores mail, serves IMAP, delivers local mail through LMTP, and executes Sieve filters. SnappyMail edits those filters through ManageSieve.
+
+AURcade creates a Dovecot mailbox for each password-enabled account. `services/mail.toml` defines the postmaster and local aliases:
 
 ```toml
 postmaster = "alice"
@@ -316,6 +320,26 @@ admin = "alice"
 Alias targets must be password-enabled account names. The postmaster account receives mail sent to `postmaster@DOMAIN`.
 
 AURcade does not create a catch-all alias. SnappyMail has no published port or administrator panel.
+
+### Upgrade from Maddy mailboxes
+
+The first Dovecot upgrade needs a short mail pause so no message arrives after the migration snapshot:
+
+```sh
+docker compose stop maddy snappymail
+docker compose up --build -d
+```
+
+The one-shot `mail-migrate` service copies existing Maddy mail into `aurcade_data/srv/dovecot_data`, verifies the exported message count, and exits. It never deletes `aurcade_data/srv/maddy_data`. Later starts skip the completed import.
+
+Check the cutover:
+
+```sh
+docker compose ps -a setup mail-migrate
+docker compose ps dovecot maddy snappymail
+```
+
+Both one-shot services must show `Exited (0)`. Dovecot, Maddy, and SnappyMail must be healthy.
 
 Before public email use, configure these DNS records:
 
@@ -348,7 +372,8 @@ AURcade uses these host paths:
 | `aurcade_data/srv/ergo_data/` | Ergo state |
 | `aurcade_data/srv/soju_data/` | Soju accounts and history |
 | `aurcade_data/srv/prosody_data/` | Prosody state |
-| `aurcade_data/srv/maddy_data/` | Mail, queues, and DKIM keys |
+| `aurcade_data/srv/maddy_data/` | Maddy queues, DKIM keys, and retained pre-Dovecot mailbox data |
+| `aurcade_data/srv/dovecot_data/` | Mailboxes, indexes, and Sieve scripts |
 | `aurcade_data/srv/snappymail_data/` | SnappyMail state |
 
 Copy `config.toml`, `services`, `keys`, and `aurcade_data` to backup storage. AURcade keeps stored mail after account removal.

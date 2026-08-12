@@ -138,6 +138,44 @@ services:
       - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
       - ./aurcade_data/srv/soju_data:/soju-data
 
+  mail-migrate:
+    image: ghcr.io/skorotkiewicz/aurcade-dovecot
+    container_name: aurcade-mail-migrate
+    build:
+      context: .
+      dockerfile: docker/dovecot/Dockerfile
+    restart: "no"
+    entrypoint: ["/usr/local/bin/aurcade-mail-migrate"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
+      - ./aurcade_data/srv/maddy_data:/old-maddy:ro
+      - ./aurcade_data/srv/dovecot_data:/var/lib/dovecot
+
+  dovecot:
+    image: ghcr.io/skorotkiewicz/aurcade-dovecot
+    container_name: dovecot
+    build:
+      context: .
+      dockerfile: docker/dovecot/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mail-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "993:993"
+      - "4190:4190"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 993 && nc -z 127.0.0.1 4190 && nc -z 127.0.0.1 24"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - ./aurcade_data/srv/service_config:/etc/aurcade/services:ro
+      - ./aurcade_data/srv/dovecot_data:/var/lib/dovecot
+
   maddy:
     image: ghcr.io/skorotkiewicz/aurcade-maddy
     container_name: maddy
@@ -146,14 +184,13 @@ services:
       dockerfile: docker/maddy/Dockerfile
     restart: unless-stopped
     depends_on:
-      setup:
-        condition: service_completed_successfully
+      dovecot:
+        condition: service_healthy
     ports:
       - "25:25"
       - "587:587"
-      - "993:993"
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 25 && nc -z 127.0.0.1 587 && nc -z 127.0.0.1 993"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 25 && nc -z 127.0.0.1 587"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -170,8 +207,10 @@ services:
       dockerfile: docker/snappymail/Dockerfile
     restart: unless-stopped
     depends_on:
+      dovecot:
+        condition: service_healthy
       maddy:
-        condition: service_started
+        condition: service_healthy
     expose:
       - "8888"
     environment:

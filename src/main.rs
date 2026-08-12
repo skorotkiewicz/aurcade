@@ -708,11 +708,11 @@ fn ensure_tls(config: &Config, domain: &str) -> Result<(PathBuf, PathBuf), Error
     Ok((certificate, private_key))
 }
 
-fn maddy_account_files(
+fn mail_account_files(
     config: &Config,
     mail: &MailConfig,
     domain: &str,
-) -> Result<(String, String), Error> {
+) -> Result<(String, String, String), Error> {
     let mail_account = |name: &str| {
         config.accounts.iter().find(|account| {
             account.password_hash.is_some() && account.name.eq_ignore_ascii_case(name)
@@ -721,9 +721,14 @@ fn maddy_account_files(
     let postmaster = mail_account(&mail.postmaster)
         .ok_or("mail postmaster must be a password-enabled account")?;
     let mut users = String::new();
+    let mut dovecot_users = String::new();
     for account in &config.accounts {
-        if account.password_hash.is_some() {
-            users.push_str(&format!("{}@{domain}\n", account.name));
+        if let Some(hash) = &account.password_hash {
+            let address = format!("{}@{domain}", account.name);
+            users.push_str(&format!("{address}\n"));
+            dovecot_users.push_str(&format!(
+                "{address}:{{ARGON2ID}}{hash}:5000:5000::/var/lib/dovecot/users/{address}::\n"
+            ));
         }
     }
     let mut aliases = format!(
@@ -748,7 +753,7 @@ fn maddy_account_files(
         })?;
         aliases.push_str(&format!("{alias}@{domain}: {}@{domain}\n", account.name));
     }
-    Ok((users, aliases))
+    Ok((users, aliases, dovecot_users))
 }
 
 fn generate_services(config: &Config) -> Result<(), Error> {
@@ -861,7 +866,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
             .any(|admin| admin.eq_ignore_ascii_case(&account.name));
         soju_users.push_str(&format!("{}\t{}\t{}\n", account.name, admin, irc.network));
     }
-    let (maddy_users, maddy_aliases) = maddy_account_files(config, &mail, domain)?;
+    let (maddy_users, maddy_aliases, dovecot_users) = mail_account_files(config, &mail, domain)?;
 
     let root = service_root();
     fs::create_dir_all(&root)?;
@@ -877,6 +882,7 @@ fn generate_services(config: &Config) -> Result<(), Error> {
     atomic_write(&root.join("maddy-domain"), domain)?;
     atomic_write(&root.join("maddy-users"), &maddy_users)?;
     atomic_write(&root.join("maddy-aliases"), &maddy_aliases)?;
+    atomic_write(&root.join("dovecot-users"), &dovecot_users)?;
     atomic_write(
         &root.join("maddy-auth"),
         "#!/bin/sh\nexec /etc/aurcade/services/aurcade auth-maddy\n",
@@ -1886,23 +1892,30 @@ mod tests {
         )
         .unwrap();
 
-        let (users, aliases) = maddy_account_files(&config, &mail, "mail.example").unwrap();
+        let (users, aliases, dovecot_users) =
+            mail_account_files(&config, &mail, "mail.example").unwrap();
         assert_eq!(users, "alice@mail.example\n");
         assert_eq!(
             aliases,
             "postmaster: alice@mail.example\npostmaster@mail.example: alice@mail.example\nadmin@mail.example: alice@mail.example\nsupport@mail.example: alice@mail.example\n"
+        );
+        assert_eq!(
+            dovecot_users,
+            format!(
+                "alice@mail.example:{{ARGON2ID}}{DUMMY_PASSWORD_HASH}:5000:5000::/var/lib/dovecot/users/alice@mail.example::\n"
+            )
         );
 
         let invalid = MailConfig {
             postmaster: "bob".into(),
             aliases: BTreeMap::new(),
         };
-        assert!(maddy_account_files(&config, &invalid, "mail.example").is_err());
+        assert!(mail_account_files(&config, &invalid, "mail.example").is_err());
         let conflicting = MailConfig {
             postmaster: "alice".into(),
             aliases: BTreeMap::from([("alice".into(), "alice".into())]),
         };
-        assert!(maddy_account_files(&config, &conflicting, "mail.example").is_err());
+        assert!(mail_account_files(&config, &conflicting, "mail.example").is_err());
     }
 
     #[test]

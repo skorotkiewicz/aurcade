@@ -18,6 +18,7 @@ if [ "$tls" = true ]; then
     cookie_secure=On
     imap_type=1
     smtp_type=2
+    sieve_type=2
     SECURE_COOKIES=true
     mail_ssl=$(cat <<EOF
 ,
@@ -36,6 +37,7 @@ else
     cookie_secure=Off
     imap_type=0
     smtp_type=0
+    sieve_type=0
     SECURE_COOKIES=false
     rm -f /usr/local/etc/php/conf.d/cookies.ini
 fi
@@ -61,7 +63,7 @@ sed -i \
 cat > "$data/domains/$domain.json" <<EOF
 {
     "IMAP": {
-        "host": "maddy",
+        "host": "dovecot",
         "port": 993,
         "type": $imap_type,
         "timeout": 30,
@@ -82,10 +84,10 @@ cat > "$data/domains/$domain.json" <<EOF
         "usePhpMail": false
     },
     "Sieve": {
-        "host": "maddy",
+        "host": "dovecot",
         "port": 4190,
-        "type": 0,
-        "enabled": false
+        "type": $sieve_type,
+        "enabled": true$mail_ssl
     },
     "whiteList": ""
 }
