@@ -287,6 +287,10 @@ Gamja connects through Soju. Browser and native bouncer clients share the same I
 
 Use `ACCOUNT@DOMAIN` to sign in to XMPP, email, and webmail. Use the account name for IRC and Soju.
 
+## Status
+
+`/status/` reports AURcade uptime, repository filesystem usage, and the Maddy outbound queue length. It returns HTTP `200` with `OK`, or HTTP `503` with `DEGRADED` when a disk or queue probe fails. Maddy metrics remain internal to the Compose network.
+
 ## TLS
 
 TLS defaults to `true`. AURcade generates a persistent self-signed certificate when certificate paths are absent.
