@@ -20,16 +20,7 @@ paths = ["bob/"]
 password_hash = "$argon2id$..."
 ```
 
-Start the stack, then export credentials without committing them:
-
-```sh
-export AURCADE_PASSWORD_A='alice password'
-export AURCADE_PASSWORD_B='bob password'
-export AURCADE_SSH_KEY_A="$HOME/.ssh/alice"
-export AURCADE_SSH_KEY_B="$HOME/.ssh/bob"
-```
-
-If both accounts deliberately use the same password, `AURCADE_PASSWORD` sets both.
+A full-suite run temporarily gives `alice` and `bob` the password `demo` and generated SSH keys, recreates the stack, then restores `config.toml` byte-for-byte and recreates the production stack.
 
 ## Run
 
@@ -37,8 +28,6 @@ If both accounts deliberately use the same password, `AURCADE_PASSWORD` sets bot
 tests/all.sh
 # or: just test-services
 ```
-
-The full suite prompts for any missing passwords and SSH private-key paths when run in a terminal. Non-interactive runs must export them first.
 
 Run one service test with `tests/auth.sh`, `tests/git.sh`, `tests/irc.sh`, `tests/soju.sh`, `tests/xmpp.sh`, or `tests/mail.sh`.
 
