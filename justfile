@@ -25,6 +25,9 @@ check:
 test: fmt
     cargo test
 
+test-services:
+    tests/all.sh
+
 install-hook:
     @printf '#!/bin/sh\nset -e\njust check\n' > .git/hooks/pre-commit
     @chmod +x .git/hooks/pre-commit
