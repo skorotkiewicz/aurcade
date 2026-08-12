@@ -1174,12 +1174,12 @@ fn repository_section<'a>(config: &'a Config, repository: &str) -> Option<&'a st
 }
 
 fn repository_revision(path: &Path) -> Result<Option<String>, Error> {
-    let status = Command::new("git")
+    let output = Command::new("git")
         .arg("--git-dir")
         .arg(path)
         .args(["rev-parse", "--verify", "--quiet", "HEAD"])
-        .status()?;
-    if status.success() {
+        .output()?;
+    if output.status.success() {
         return Ok(Some("HEAD".into()));
     }
     let branches = branch_refs(path)?;
