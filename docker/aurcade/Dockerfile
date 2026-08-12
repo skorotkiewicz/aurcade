@@ -30,10 +30,7 @@ RUN git init \
     && git fetch --depth 1 origin "$GAMJA_COMMIT" \
     && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "$GAMJA_COMMIT"
-RUN sed -i 's/username: params.username || params.nick,/username: params.nick,/' components/connect-form.js \
-    && grep -Fq 'username: params.nick,' components/connect-form.js \
-    && npm ci && npm run build
-# RUN npm ci && npm run build
+RUN npm ci && npm run build
 
 FROM node:24.19.0-alpine AS converse-build
 RUN apk add --no-cache ca-certificates
