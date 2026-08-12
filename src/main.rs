@@ -1173,20 +1173,41 @@ fn repository_section<'a>(config: &'a Config, repository: &str) -> Option<&'a st
     })
 }
 
+fn repository_revision(path: &Path) -> Result<Option<String>, Error> {
+    let status = Command::new("git")
+        .arg("--git-dir")
+        .arg(path)
+        .args(["rev-parse", "--verify", "--quiet", "HEAD"])
+        .status()?;
+    if status.success() {
+        return Ok(Some("HEAD".into()));
+    }
+    let branches = branch_refs(path)?;
+    Ok((branches.len() == 1).then(|| format!("refs/heads/{}", branches.keys().next().unwrap())))
+}
+
 fn repository_metadata_id(path: &Path) -> Result<Option<Vec<u8>>, Error> {
+    let Some(revision) = repository_revision(path)? else {
+        return Ok(None);
+    };
     let output = Command::new("git")
         .arg("--git-dir")
         .arg(path)
-        .args(["rev-parse", "--verify", "--quiet", "HEAD:.aurcade"])
+        .args(["rev-parse", "--verify", "--quiet"])
+        .arg(format!("{revision}:.aurcade"))
         .output()?;
     Ok(output.status.success().then_some(output.stdout))
 }
 
 fn repository_description(path: &Path) -> Result<Option<String>, Error> {
+    let Some(revision) = repository_revision(path)? else {
+        return Ok(None);
+    };
     let output = Command::new("git")
         .arg("--git-dir")
         .arg(path)
-        .args(["show", "HEAD:.aurcade"])
+        .arg("show")
+        .arg(format!("{revision}:.aurcade"))
         .output()?;
     if !output.status.success() {
         return Ok(None);
@@ -2508,6 +2529,65 @@ Features:
         git(&["commit", "--quiet", "-m", "remove metadata"]);
         assert_eq!(repository_metadata_id(&git_dir).unwrap(), None);
         assert_eq!(repository_description(&git_dir).unwrap(), None);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn reads_metadata_from_the_only_branch_when_head_is_unborn() {
+        let directory = test_directory("initial-head");
+        let source = directory.join("source");
+        let repository = directory.join("repository.git");
+        assert!(
+            Command::new("git")
+                .args(["init", "--quiet", "--initial-branch=hst"])
+                .arg(&source)
+                .status()
+                .unwrap()
+                .success()
+        );
+        fs::write(source.join(".aurcade"), "description\n").unwrap();
+        for arguments in [
+            &["config", "user.name", "AURcade"][..],
+            &["config", "user.email", "aurcade@example.invalid"],
+            &["add", ".aurcade"],
+            &["commit", "--quiet", "-m", "initial"],
+        ] {
+            assert!(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(&source)
+                    .args(arguments)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        assert!(
+            Command::new("git")
+                .args(["init", "--bare", "--quiet", "--initial-branch=main"])
+                .arg(&repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&source)
+                .args(["push", "--quiet", repository.to_str().unwrap(), "hst"])
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        assert_eq!(
+            fs::read_to_string(repository.join("HEAD")).unwrap(),
+            "ref: refs/heads/main\n"
+        );
+        assert_eq!(
+            repository_description(&repository).unwrap().as_deref(),
+            Some("description")
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 
