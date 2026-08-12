@@ -10,7 +10,7 @@ done
 work=$(mktemp -d)
 token=$(date +%s)-$$
 repo="$AURCADE_USER_A/test-$token"
-ssh_base=(-p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes)
+ssh_base=(-T -p 2222 -o ForwardX11=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes)
 cleanup() {
     ssh "${ssh_base[@]}" -i "$AURCADE_SSH_KEY_A" git@"$AURCADE_HOST" \
         "delete $repo --confirm $repo" >/dev/null 2>&1 || true
@@ -18,8 +18,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-ssh "${ssh_base[@]}" -i "$AURCADE_SSH_KEY_A" git@"$AURCADE_HOST" </dev/null \
-    | grep -F 'AURCADE' >/dev/null
+lobby=$(ssh "${ssh_base[@]}" -i "$AURCADE_SSH_KEY_A" git@"$AURCADE_HOST" </dev/null || true)
+grep -F 'NO SHELL. ONLY GIT. GAME ON.' <<<"$lobby" >/dev/null
 
 git -C "$work" init -q --initial-branch=main source
 git -C "$work/source" config user.name 'AURcade tests'
@@ -33,7 +33,7 @@ GIT_SSH_COMMAND="ssh ${ssh_base[*]} -i $AURCADE_SSH_KEY_A" \
 scheme=http
 curl_args=(-fsS)
 if [[ $AURCADE_TLS == true ]]; then scheme=https; curl_args=(-kfsS); fi
-git -c http.sslVerify=false clone -q "$scheme://$AURCADE_HOST:8080/$repo.git" "$work/clone"
+git -c http.sslVerify=false clone -q "$scheme://$AURCADE_HOST:8080/$repo" "$work/clone"
 grep -F "git integration $token" "$work/clone/README.md" >/dev/null
 curl "${curl_args[@]}" "$scheme://$AURCADE_HOST:8080/$repo/" | grep -F "test-$token" >/dev/null
 
