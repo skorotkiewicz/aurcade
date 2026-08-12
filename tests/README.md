@@ -29,8 +29,8 @@ tests/all.sh
 # or: just test-services
 ```
 
-Run one service test with `tests/auth.sh`, `tests/git.sh`, `tests/irc.sh`, `tests/soju.sh`, `tests/xmpp.sh`, or `tests/mail.sh`.
+Run one service test with `tests/auth.sh`, `tests/git.sh`, `tests/aur.sh`, `tests/irc.sh`, `tests/soju.sh`, `tests/xmpp.sh`, or `tests/mail.sh`.
 
 Optional overrides: `AURCADE_HOST`, `AURCADE_DOMAIN`, `AURCADE_TLS`, `AURCADE_USER_A`, `AURCADE_USER_B`, `AURCADE_IRC_NETWORK`, and `AURCADE_MAIL_ALIAS`. The mail test otherwise discovers an alias that targets user A from `services/mail.toml`.
 
-The tests create transient IRC/XMPP messages, mail, a Sieve script, and a Git repository. Mail and Sieve state are removed. Git deletion intentionally leaves its small restore point in `.aurcade-trash`, because recoverable deletion is part of the test.
+The tests create transient IRC/XMPP messages, mail, a Sieve script, a Git repository, and an AUR package repository. Mail and Sieve state are removed. Git deletion intentionally leaves small restore points in `.aurcade-trash`, because recoverable deletion is part of the tests.

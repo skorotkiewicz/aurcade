@@ -88,7 +88,7 @@ echo 'Starting temporary Alice/Bob test fixture...'
 docker compose up -d --force-recreate
 wait_for_services
 
-for test in auth irc soju xmpp mail git; do
+for test in auth irc soju xmpp mail git aur; do
     printf '\n==> tests/%s.sh\n' "$test"
     "tests/$test.sh"
 done
